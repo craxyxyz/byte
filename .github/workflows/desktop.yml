@@ -149,7 +149,8 @@ jobs:
         if: failure()
         run: |
           touch build.log
-          grep -iE 'error|fatal|failed' build.log | tail -n 40 > why.txt || true
+          grep -E 'error:' build.log | grep -v 'error: (Build|Emitting)' | sort -u | tail -n 25 > why.txt || true
+          grep -iE 'error|fatal|failed' build.log | tail -n 20 >> why.txt || true
           tail -n 60 build.log >> why.txt
           python3 - <<'EOF'
           t=open('why.txt',encoding='utf-8',errors='replace').read()[-7000:]
@@ -180,6 +181,13 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+      - name: Newest Xcode on the runner
+        run: |
+          ls -d /Applications/Xcode*.app || true
+          X=$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          [ -n "$X" ] && sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+          sw_vers
       - run: flutter pub get --enforce-lockfile
       - name: Build macOS
         run: |
