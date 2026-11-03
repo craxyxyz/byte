@@ -217,9 +217,112 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       } catch (_) {}
     }
   }
-  Duration get position => _cur.position;
+  // During the pause between songs the next one waits at its start (the
+  // deck may still hold the song that just ended).
+  Duration get position => inGap && !_gapLoaded ? Duration.zero : _cur.position;
   Duration? get duration => remote?.remoteDuration ?? _cur.duration ?? (current.value?.durationSec == null ? null : Duration(seconds: current.value!.durationSec!));
-  bool get playing => remote != null ? remote!.remotePlaying : _cur.playing;
+  bool get playing => remote != null ? remote!.remotePlaying : (_cur.playing || inGap);
+
+  /// Is sound actually coming out (false during the pause between songs)?
+  /// Listen together follows this, so guests start with the host.
+  bool get audible => remote != null ? remote!.remotePlaying : (_cur.playing && _cur.processingState != ProcessingState.completed);
+
+  // ── 1.4.5: a short silence between songs ──────────────────────────────
+  /// Apurba: "ek song khatam hone ke baad dusra song turant suru ho ja raha
+  /// hai, thoda 2-3 sec baad next song play karna". When a song ends on its
+  /// own and no blend is set (Crossfade 0, Automix off), the next one
+  /// starts after this much silence. Next / Play / tapping a song skip it,
+  /// Pause cancels it. 0 = the old instant hand-off.
+  Duration autoAdvanceGap = const Duration(milliseconds: 2500);
+
+  /// The timer the gap waits on (a fake clock in tests).
+  Timer Function(Duration, void Function()) gapTimer = Timer.new;
+
+  /// true while the next song waits out the gap (it already shows).
+  final ValueNotifier<bool> waitingForNext = ValueNotifier(false);
+
+  Timer? _gapT;
+  int _gapToken = -1; // the play the gap belongs to
+  bool _gapLoaded = false; // its song is loaded and only waits for the timer
+  bool _gapHeld = false; // paused during the gap (or loaded paused): don't start
+
+  /// The next song is showing and will start by itself after the gap.
+  bool get inGap => _gapToken >= 0 && _gapToken == _loadToken && !_gapHeld;
+
+  /// The silence to leave between [ended] and [next] when one ends on its own.
+  Duration? _gapBetween(Item? ended, Item? next) {
+    if (autoAdvanceGap <= Duration.zero || remote != null) return null;
+    // A crossfade set by hand overlaps as before (Automix no longer overlaps).
+    if (!_automixOn && settings.crossfadeSeconds > 0) return null;
+    if (ended != null && next != null && keepTogether(ended, next)) return null; // gapless album
+    return autoAdvanceGap;
+  }
+
+  void _beginGap(Duration d, int token, {bool held = false}) {
+    _gapT?.cancel();
+    _gapToken = token;
+    _gapLoaded = false;
+    _gapHeld = held;
+    _gapT = held ? null : gapTimer(d, _gapElapsed);
+    waitingForNext.value = !held;
+  }
+
+  void _clearGap() {
+    _gapT?.cancel();
+    _gapT = null;
+    _gapToken = -1;
+    _gapLoaded = false;
+    _gapHeld = false;
+    waitingForNext.value = false;
+  }
+
+  void _gapElapsed() {
+    _gapT = null;
+    if (_gapToken != _loadToken || _gapToken < 0) {
+      _clearGap();
+      return;
+    }
+    if (_gapHeld) return;
+    waitingForNext.value = false;
+    if (_gapLoaded) {
+      _clearGap();
+      unawaited(_cur.play());
+    }
+    // still loading: the load starts it the moment it's ready
+  }
+
+  /// Where a freshly loaded song would start: now, or after the gap.
+  void _startLoaded(int token) {
+    if (token == _gapToken) {
+      if (_gapHeld) {
+        _clearGap();
+        _broadcast(_cur);
+        return;
+      }
+      if (_gapT != null) {
+        _gapLoaded = true;
+        _broadcast(_cur);
+        return;
+      }
+      _clearGap();
+    }
+    unawaited(_cur.play());
+  }
+
+  /// Pause during the gap: the next song stays, but doesn't start.
+  bool _holdGap() {
+    if (!inGap) return false;
+    _gapT?.cancel();
+    _gapT = null;
+    if (_gapLoaded) {
+      _clearGap();
+    } else {
+      _gapHeld = true; // still loading: load it, don't start it
+      waitingForNext.value = false;
+    }
+    _broadcast(_cur);
+    return true;
+  }
   Stream<Duration> get positionStream => _cur.positionStream;
 
   // ── loading sources ──────────────────────────────────────────────────
@@ -411,7 +514,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   /// shown on the player under the title.
   final ValueNotifier<String?> playingFrom = ValueNotifier(null);
 
-  Future<void> playItems(List<Item> items, {int start = 0, bool? shuffle, bool radio = false, bool rememberShuffle = true, String? from}) async {
+  Future<void> playItems(List<Item> items, {int start = 0, bool? shuffle, bool radio = false, bool rememberShuffle = true, String? from, bool startPaused = false}) async {
     final playable = items.where((i) => i.isPlayable).toList();
     if (playable.isEmpty) return;
     final s = start.clamp(0, playable.length - 1);
@@ -424,7 +527,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _preparedOnIdle = null;
     if (shuffle != null && rememberShuffle) await library.put('shuffle', shuffle);
     _queueChanged();
-    await _playCurrent();
+    await _playCurrent(startPaused: startPaused);
     if (radio && !playable[s].isLocal) unawaited(_extendWithRadio(playable[s]));
   }
 
@@ -533,6 +636,21 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> play() async {
     if (current.value == null) return;
     if (remote != null) return remote!.remotePlay();
+    // Play during the pause between songs: start the next one now.
+    if (_gapToken >= 0 && _gapToken == _loadToken) {
+      if (_gapLoaded) {
+        _clearGap();
+        await _cur.play();
+      } else {
+        // still loading: it starts the moment it's ready
+        _gapT?.cancel();
+        _gapT = null;
+        _gapHeld = false;
+        waitingForNext.value = false;
+        _broadcast(_cur);
+      }
+      return;
+    }
     // Long pauses outlive YouTube's stream links: reload at the same spot.
     final s = currentStream.value;
     if (s != null && s.expired && !current.value!.isLocal && !library.isDownloaded(current.value!.id)) {
@@ -560,6 +678,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   @override
   Future<void> pause() async {
     if (remote != null) return remote!.remotePause();
+    if (_holdGap()) return;
     _cancelFade(finishIncoming: true);
     final fade = pauseFadeMs();
     if (fade > 0 && _cur.playing) {
@@ -574,6 +693,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> stop() async {
+    _clearGap();
     _cancelFade(finishIncoming: false);
     await _cur.stop();
     await _idle.stop();
@@ -588,8 +708,12 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       return remote!.remoteSeek(position);
     }
     _cancelFade(finishIncoming: true);
+    // Seeking in the next song during the pause between songs starts it there.
+    final startNow = inGap && _gapLoaded;
+    if (startNow) _clearGap();
     await _cur.seek(position);
     clock.set(position.inMilliseconds);
+    if (startNow) unawaited(_cur.play());
   }
 
   @override
@@ -606,7 +730,9 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   @override
   Future<void> skipToPrevious() async {
     _cancelFade(finishIncoming: true);
-    if (_cur.position > const Duration(seconds: 3) || !queueModel.previous()) {
+    // During the pause between songs the next one sits at 0:00: back goes to
+    // the song that just ended.
+    if ((!inGap && _cur.position > const Duration(seconds: 3)) || !queueModel.previous()) {
       await seek(Duration.zero);
       return;
     }
@@ -759,10 +885,19 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   // ── the core: start the current queue item ───────────────────────────
-  Future<void> _playCurrent({Duration? startAt}) async {
+  Future<void> _playCurrent({Duration? startAt, Duration? afterGap, bool startPaused = false}) async {
     final it = queueModel.current;
     if (it == null) return;
     final token = ++_loadToken;
+    _prepTries = 0;
+    _tailFor = null;
+    _tailTimer?.cancel();
+    _tailTimer = null;
+    if (afterGap != null || startPaused) {
+      _beginGap(afterGap ?? Duration.zero, token, held: startPaused);
+    } else {
+      _clearGap();
+    }
     _attempts = 0;
     _recovering = false;
     _healthyFromMs = startAt?.inMilliseconds ?? 0;
@@ -798,7 +933,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       await old.stop();
       await _cur.setVolume(_gainFor(it));
       await _cur.setSpeed(settings.speed);
-      unawaited(_cur.play());
+      _startLoaded(token);
       _broadcast(_cur);
       return;
     }
@@ -806,13 +941,16 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     try {
       await _idle.stop();
       _preparedOnIdle = null;
+      // A deck that ended still counts as "playing" and would start the new
+      // song the moment it loads: hold it for the gap (or a paused load).
+      if (token == _gapToken) await _cur.pause();
       final src = await _sourceFor(it);
       if (token != _loadToken) return; // user moved on meanwhile
       await _load(_cur, src, initialPosition: startAt).timeout(loadTimeout);
       if (token != _loadToken) return;
       await _cur.setVolume(_gainFor(it));
       await _cur.setSpeed(settings.speed);
-      unawaited(_cur.play());
+      _startLoaded(token);
     } catch (e) {
       if (token != _loadToken) return;
       await _handleLoadError(it, e, startAt);
@@ -1071,17 +1209,28 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         await _cur.seek(Duration.zero);
         return;
       }
+      final ended = current.value;
       if (queueModel.repeat == q.RepeatMode.one) {
-        await _cur.seek(Duration.zero);
-        await _cur.play();
+        final gap = _gapBetween(ended, ended);
+        if (gap == null) {
+          await _cur.seek(Duration.zero);
+          await _cur.play();
+        } else {
+          // the same song again, after the same short silence
+          await _cur.pause();
+          await _cur.seek(Duration.zero);
+          _beginGap(gap, _loadToken);
+          _gapLoaded = true;
+          _broadcast(_cur);
+        }
         return;
       }
       if (queueModel.next()) {
-        await _playCurrent();
+        await _playCurrent(afterGap: _gapBetween(ended, queueModel.current));
       } else if (settings.autoplay && current.value != null && !current.value!.isLocal) {
         await _extendWithRadio(current.value!);
         if (queueModel.next()) {
-          await _playCurrent();
+          await _playCurrent(afterGap: _gapBetween(ended, queueModel.current));
         } else {
           await _cur.pause();
         }
@@ -1203,33 +1352,60 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       _nextPrepFor = next.id;
       unawaited(automix!.prepare(next, preferMp4: _needsMp4));
     }
-    if (sleep.value.$1 == SleepMode.endOfTrack) return;
-    var plan = planFor(cur, next, ms);
+    // 1.4.5 (Apurba: "pichle wale version mah automix sahi tha, aise hi
+    // karna bas 2-3 wait karna uske bad"): Automix keeps its matched
+    // loudness and trims dead air, but never overlaps. The song plays out
+    // (silence at its very end cut with a short fade), then the gap, then
+    // the next song from where its music starts.
     final endA = automix!.analysisOf(cur.id)?.audioEndMs ?? ms;
-    // Load the next song on the other deck ~20 s before the blend, once its
-    // fetch is done (or it's getting late).
+    final endAt = min(endA, ms);
+    final from = automix!.analysisOf(next.id)?.audioStartMs ?? 0;
     final fetching = automix!.isPreparing(next.id);
-    if (pos >= plan.startAtMs - 20000 && (!fetching || pos >= plan.startAtMs - 8000) && _preparedOnIdle?.id != next.id && !_preparing) {
-      unawaited(_prepareNext(next, from: plan.incomingFromMs));
+    if (pos >= endAt - 20000 &&
+        (!fetching || pos >= endAt - 8000) &&
+        (_preparedOnIdle?.id != next.id || (_idleFrom ?? 0) != from) &&
+        !_preparing &&
+        _prepTries < 3) {
+      _prepTries++;
+      unawaited(_prepareNext(next, from: from));
       return;
     }
-    if (_preparedOnIdle?.id != next.id) return;
-    final left = plan.startAtMs - pos;
-    if (left <= 0) {
-      if (-left > 900) plan = plan.startingLate(pos, min(endA, ms));
-      if (pos >= ms - 300) return; // too late: the song ends and the next starts gaplessly
-      _startTransition(plan, plan.fadeMs);
-    } else if (left < 320 && _startTimer == null) {
-      // land on the beat: start exactly on time, not on the next tick
-      final token = _loadToken;
-      final id = cur.id;
-      _startTimer = Timer(Duration(milliseconds: (left / _cur.speed).round()), () {
-        _startTimer = null;
-        if (_fading || token != _loadToken || current.value?.id != id || !_cur.playing) return;
-        if (queueModel.nextItem?.id != next.id || _preparedOnIdle?.id != next.id) return;
-        _startTransition(planFor(cur, next, ms), plan.fadeMs);
-      });
+    if (sleep.value.$1 == SleepMode.endOfTrack && endAt >= ms - 300) return;
+    // Dead air at the end (more than a second): fade out and end there.
+    if (endAt < ms - 1000 && pos >= endAt - tailFadeMs && _tailFor != cur.id) {
+      _tailFor = cur.id;
+      _fadeOutAndEnd(cur.id);
     }
+  }
+
+  /// The short fade where Automix cuts a song's silent ending.
+  int tailFadeMs = 600;
+  String? _tailFor;
+  int _prepTries = 0;
+  Timer? _tailTimer;
+
+  void _fadeOutAndEnd(String id) {
+    final token = _loadToken;
+    final deck = _cur;
+    final from = deck.volume;
+    final started = DateTime.now().millisecondsSinceEpoch;
+    _tailTimer?.cancel();
+    _tailTimer = Timer.periodic(const Duration(milliseconds: 40), (t) async {
+      if (token != _loadToken || current.value?.id != id || deck != _cur || !deck.playing) {
+        t.cancel();
+        if (deck.volume < from) unawaited(deck.setVolume(_gainFor(current.value)));
+        return;
+      }
+      final k = ((DateTime.now().millisecondsSinceEpoch - started) / max(1, tailFadeMs)).clamp(0.0, 1.0);
+      unawaited(deck.setVolume(from * (1 - k)));
+      if (k < 1) return;
+      t.cancel();
+      _tailTimer = null;
+      await deck.pause();
+      await deck.setVolume(_gainFor(current.value));
+      if (token != _loadToken) return;
+      await _onTrackEnded();
+    });
   }
 
   void _smartOrder(Item cur) {
@@ -1426,6 +1602,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final left = at.difference(DateTime.now()).inMilliseconds;
     if (left <= 0) {
       sleep.value = (SleepMode.off, null);
+      _holdGap();
       _cur.pause().then((_) => _cur.setVolume(_gainFor(current.value)));
     } else if (left < 10000) {
       _cur.setVolume(sleepFadeVolume(left) * _gainFor(current.value));
@@ -1439,7 +1616,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       remoteChanged();
       return;
     }
-    final playingNow = p.playing;
+    final playingNow = p.playing || inGap;
     playbackState.add(
       PlaybackState(
         controls: [MediaControl.skipToPrevious, if (playingNow) MediaControl.pause else MediaControl.play, MediaControl.skipToNext],
@@ -1459,7 +1636,8 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         playing: playingNow,
         updatePosition: p.position,
         bufferedPosition: p.bufferedPosition,
-        speed: p.speed,
+        // during the pause between songs the next one waits at 0:00
+        speed: inGap && !p.playing ? 0 : p.speed,
         queueIndex: queueModel.position < 0 ? null : queueModel.position,
         shuffleMode: queueModel.shuffle ? AudioServiceShuffleMode.all : AudioServiceShuffleMode.none,
         repeatMode: switch (queueModel.repeat) {
@@ -1489,6 +1667,8 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _fadeTimer?.cancel();
     _startTimer?.cancel();
     _duckTimer?.cancel();
+    _gapT?.cancel();
+    _tailTimer?.cancel();
     for (final s in _subs) {
       await s.cancel();
     }

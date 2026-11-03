@@ -123,7 +123,7 @@ void main() {
           expect(tester.takeException(), isNull, reason: '$tag ${page.runtimeType}');
           if (page is PlaybackScreen) {
             // the crossfade slider is handed over to Automix
-            expect(find.text('Automix is on and does the blending'), findsOneWidget);
+            expect(find.text('Automix is on: a short pause between songs'), findsOneWidget);
             final sliders = tester.widgetList<Slider>(find.byType(Slider));
             expect(sliders.every((s) => s.onChanged == null), isTrue);
           }

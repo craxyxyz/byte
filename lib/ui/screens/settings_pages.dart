@@ -391,7 +391,7 @@ class _AutomixScreenState extends State<AutomixScreen> {
               _switchRow(
                 Icons.auto_awesome_rounded,
                 'Automix',
-                'Blends songs like a DJ: on the beat, same loudness, no silent gaps',
+                'Same loudness, no dead air, then a short pause before the next song',
                 on,
                 (v) => st.automix = v,
               ),
@@ -603,7 +603,7 @@ class PlaybackScreen extends StatelessWidget {
                             children: [
                               Text('Crossfade', style: BT.body.copyWith(color: st.automix ? p.secondary : p.label)),
                               Text(
-                                st.automix ? 'Automix is on and does the blending' : 'Blends one song into the next',
+                                st.automix ? 'Automix is on: a short pause between songs' : 'Blends one song into the next',
                                 style: BT.sub.copyWith(color: p.secondary),
                               ),
                             ],
@@ -630,7 +630,7 @@ class PlaybackScreen extends StatelessWidget {
                 icon: Icons.auto_awesome_rounded,
                 title: 'Automix',
                 badge: const Badge2('BETA'),
-                subtitle: 'DJ-style blends between songs',
+                subtitle: 'Matched loudness, a short pause between songs',
                 value: !st.automix ? 'Off' : (st.automixSmart ? 'Smart' : 'Simple'),
                 chevron: true,
                 onTap: () => pushPage(context, const AutomixScreen()),
@@ -1794,7 +1794,7 @@ class _AutomixBanner extends StatelessWidget {
                     style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.6, height: 1),
                   ),
                   SizedBox(height: 6),
-                  Text('Every song flows into the next, on the beat.', maxLines: 3, style: TextStyle(color: Colors.white, fontSize: 14, height: 1.25)),
+                  Text('Every song at the same loudness, with a short pause in between.', maxLines: 3, style: TextStyle(color: Colors.white, fontSize: 14, height: 1.25)),
                 ],
               ),
             ),

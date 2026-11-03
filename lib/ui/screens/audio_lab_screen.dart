@@ -174,7 +174,7 @@ class AudioLabScreen extends StatelessWidget {
 
 String _transitionLabel() {
   final st = Services.i.settings;
-  if (st.automix) return 'Auto crossfade';
+  if (st.automix) return 'Automix';
   if (st.crossfadeSeconds > 0) return 'Crossfade ${st.crossfadeSeconds.round()} s';
   return 'Off';
 }

@@ -58,11 +58,12 @@ class Settings extends ChangeNotifier {
   AudioQuality get downloadQuality => AudioQuality.values[_get('qDownload', AudioQuality.high.index)];
   set downloadQuality(AudioQuality q) => _set('qDownload', q.index);
 
-  /// 0 = gapless hand-off, up to 12 s of overlap.
+  /// 0 = no blend (a short silence between songs, 1.4.5), up to 12 s of overlap.
   double get crossfadeSeconds => _get<double>('crossfade', 0.0);
   set crossfadeSeconds(double v) => _set('crossfade', v.clamp(0.0, 12.0));
 
-  // Automix: DJ-style blends between songs.
+  // Automix: level-matched, silence-trimmed hand-offs between songs. Since
+  // 1.4.5 they don't overlap: a song ends, a short silence, the next starts.
   bool get automix => _get('automix', true);
   set automix(bool v) => _set('automix', v);
 

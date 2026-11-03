@@ -214,7 +214,7 @@ void main() {
           first = false;
         }
       }
-      expect(Brand.version, '1.4.4');
+      expect(Brand.version, '1.4.5');
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 30));
     });

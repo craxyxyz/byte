@@ -5,18 +5,18 @@
 **Hinglish.** Byte web browser mein chalta hai. Browser seedha music catalogue se baat nahi karne deta, isliye web app tumhare Supabase project ka ek chhota function `byte-proxy` use karta hai. Bas ek baar on karna hai.
 
 ## Option A: Dashboard (no install / kuch install nahi karna)
-1. Open https://supabase.com/dashboard/project/qygsggrbjpltafarypel/functions
+1. Open https://supabase.com/dashboard/project/ymnmrxgbjgvtavzyohdp/functions
 2. **Deploy a new function** → **Via Editor**
 3. Function name: `byte-proxy` (exactly / bilkul yahi naam)
 4. Delete the sample code and paste the whole of `index.ts` from this folder. **Deploy**.
 5. Open the function → **Details** (or Settings) → turn **OFF** "Enforce JWT verification" / "Verify JWT" → **Save**.
    (Songs play through an `<audio>` tag, which can't send a login key. That's why this must be off.)
-6. Check: open `https://qygsggrbjpltafarypel.supabase.co/functions/v1/byte-proxy?ping=1` in a browser. You should see `{"ok":true,"name":"byte-proxy","v":1}`.
+6. Check: open `https://ymnmrxgbjgvtavzyohdp.supabase.co/functions/v1/byte-proxy?ping=1` in a browser. You should see `{"ok":true,"name":"byte-proxy","v":1}`.
 
 ## Option B: Supabase CLI
 ```
 supabase login
-supabase functions deploy byte-proxy --project-ref qygsggrbjpltafarypel --no-verify-jwt
+supabase functions deploy byte-proxy --project-ref ymnmrxgbjgvtavzyohdp --no-verify-jwt
 ```
 (Run from the folder that contains `supabase/functions/byte-proxy/index.ts`.)
 

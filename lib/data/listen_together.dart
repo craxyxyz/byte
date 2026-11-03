@@ -10,10 +10,18 @@ import 'party_net.dart';
 
 export 'party_net.dart';
 
-/// Apurba's own Supabase project (Listen together runs only here).
+/// Apurba's own Supabase project, "Byte" (1.4.5: moved from the older shared
+/// project): sign-in, sync, Listen together, admin and the web proxy all
+/// live here. Both can be swapped at build time:
+/// --dart-define=BYTE_SUPABASE_URL=... / --dart-define=BYTE_SUPABASE_KEY=...
 class Backend {
-  static const url = 'https://qygsggrbjpltafarypel.supabase.co';
-  static const publishableKey = 'sb_publishable_Y6bO7HdPlX_w1vvkIG3vCA_oPJMqdRH';
+  static const _url = 'https://ymnmrxgbjgvtavzyohdp.supabase.co';
+  static const _key = 'sb_publishable_UX9Y8IqwgT-MXeaKpK0S_Q_BDBOXOqh'; // public by design
+  static const _urlOverride = String.fromEnvironment('BYTE_SUPABASE_URL');
+  static const _keyOverride = String.fromEnvironment('BYTE_SUPABASE_KEY');
+  static const url = _urlOverride == '' ? _url : _urlOverride;
+  static const anonKey = _keyOverride == '' ? _key : _keyOverride;
+  static const publishableKey = anonKey;
 }
 
 /// What Listen together needs from the music player (so it can be tested
@@ -610,17 +618,28 @@ class ListenTogether extends ChangeNotifier {
       });
       return;
     }
-    String action;
+    String? action;
     if (it?.id != prev?.item?.id) {
       action = it == null ? 'Stopped' : 'Changed the song to "${it.title}"';
     } else if (player.isPlaying != prev?.playing) {
-      action = player.isPlaying ? 'Played' : 'Paused';
+      // 1.4.5: the next song starting by itself after the short pause
+      // between songs isn't a "Played" tap; it only moves everyone on.
+      final autoStart =
+          player.isPlaying &&
+          prev?.by == deviceId &&
+          prev?.playing == false &&
+          (prev?.action?.startsWith('Changed the song') ?? false) &&
+          player.position.inMilliseconds < 4000;
+      // ...nor is the stop at the very end of a song before the next one.
+      final d = it?.durationSec;
+      final atEnd = !player.isPlaying && d != null && d > 0 && player.position.inMilliseconds >= d * 1000 - 1500;
+      action = autoStart || atEnd ? null : (player.isPlaying ? 'Played' : 'Paused');
     } else {
       action = 'Seeked to ${_mmss(player.position.inMilliseconds)}';
     }
     final s = _snapshot(bump: true, action: action);
     last = s;
-    _log(displayName(), action);
+    if (action != null) _log(displayName(), action);
     notifyListeners();
     _send('state', s.toJson());
     _saveSoon();
@@ -727,10 +746,12 @@ class ListenTogether extends ChangeNotifier {
   }
 
   // ── party → this phone ────────────────────────────────────────────────
-  Future<void> _apply(RoomState s, {bool force = false, bool beat = false}) async {
+  Future<void> _apply(RoomState s, {bool force = false, bool beat = false, bool again = false}) async {
     if (!active) return;
     final prev = last;
-    if (!beat) {
+    if (again) {
+      // the newest state, already taken in: only the player follows it now
+    } else if (!beat) {
       if (!force && !s.newerThan(prev)) return;
       last = s;
       capacity = s.capacity;
@@ -743,7 +764,15 @@ class ListenTogether extends ChangeNotifier {
       if (prev == null || s.v != prev.v || s.item?.id != prev.item?.id) return;
     }
     final it = s.item;
-    if (it == null || _applying) return;
+    if (it == null) return;
+    if (_applying) {
+      // 1.4.5: a change that lands while the last one is still being
+      // applied (a song end: "paused" then "next song" a few ms apart) was
+      // dropped, and a paused guest ignores heartbeats, so it stayed on the
+      // old song. Apply the newest state once this one is done.
+      if (!beat) _reapply = true;
+      return;
+    }
     if (beat && !player.isPlaying) return; // paused here on purpose
     _applying = true;
     try {
@@ -759,8 +788,15 @@ class ListenTogether extends ChangeNotifier {
     } finally {
       _applying = false;
       _quietUntil = _now() + 1500;
+      if (_reapply) {
+        _reapply = false;
+        final l = last;
+        if (l != null && active) unawaited(_apply(l, again: true));
+      }
     }
   }
+
+  bool _reapply = false;
 
   Future<void> _syncClock() async {
     _offsets.clear();

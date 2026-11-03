@@ -412,7 +412,9 @@ class AudioLab extends ChangeNotifier {
   double pitchFor(double speed) => (preservePitch ? 1.0 : speed) * math.pow(2, pitchSemis / 12).toDouble();
 
   // ── Transition ──
-  bool get gapless => _g('gapless', true);
+  // 1.4.5: off unless turned on by hand, so album tracks get the short
+  // silence between songs like everything else.
+  bool get gapless => _g('gapless', false);
   set gapless(bool v) => _s('gapless', v);
   bool get fadeOnPause => _g('fadePause', true);
   set fadeOnPause(bool v) => _s('fadePause', v);

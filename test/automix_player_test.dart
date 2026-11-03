@@ -117,46 +117,41 @@ void main() {
   FakePlayerPlatform deckOf(String id) => fakeAudio.players.values.lastWhere((x) => x.uri?.contains('/$id/') ?? false);
   Iterable<FakePlayerPlatform> playingDecks() => fakeAudio.players.values.where((x) => x.playing);
 
-  test('smart blend: starts before the silent outro, on the beat, incoming from its first beat, tempo nudged then eased back', () async {
+  test('1.4.5 Automix: no overlap — the silent end is cut with a short fade, 2.5 s of quiet, the next starts from its first sound', () async {
     durations.addAll({'mixAAAAAAA1': 24000, 'mixAAAAAAA2': 30000});
     p = await build({
       'mixAAAAAAA1': beatTrack(durMs: 24000, bpm: 124, end: 20000, loud: -9), // 4 s of silence at the end
       'mixAAAAAAA2': beatTrack(durMs: 30000, bpm: 120, start: 600, loud: -14),
     });
+    expect(sv.settings.automix, isTrue);
     await p.playItems([s('mixAAAAAAA1'), s('mixAAAAAAA2', sec: 30)]);
     await until(() => ax.ready.contains('mixAAAAAAA1'));
-    await p.seek(const Duration(seconds: 12));
-    // the next song is fetched + analysed ahead of time
+    await p.seek(const Duration(seconds: 15));
     await until(() => ax.ready.contains('mixAAAAAAA2'));
-    final plan = p.planFor(s('mixAAAAAAA1'), s('mixAAAAAAA2', sec: 30), 24000);
-    expect(plan.beatMatched, isTrue);
-    expect(plan.startAtMs, lessThanOrEqualTo(16000));
-    expect(plan.startAtMs, greaterThan(14000));
-    await until(() => p.inTransition, why: 'blend started');
-    final outDeck = deckOf('mixAAAAAAA1');
+    var overlap = false;
+    DateTime? quietAt;
+    var outPos = 0;
+    while (!(p.current.value!.id == 'mixAAAAAAA2' && playingDecks().length == 1 && playingDecks().first.uri!.contains('/mixAAAAAAA2/'))) {
+      if (playingDecks().length > 1) overlap = true;
+      for (final d in playingDecks()) {
+        if (d.uri!.contains('/mixAAAAAAA1/')) outPos = d.position.inMilliseconds;
+      }
+      if (playingDecks().isEmpty) quietAt ??= DateTime.now();
+      expect(p.inTransition, isFalse, reason: 'Automix never blends one song over the next now');
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    }
+    final startedAt = DateTime.now();
+    expect(overlap, isFalse);
+    // ended where the music ends (20 s), not after the 4 s of silence
+    expect(outPos, inInclusiveRange(19000, 20100));
+    expect(quietAt, isNotNull);
+    expect(startedAt.difference(quietAt!).inMilliseconds, inInclusiveRange(2300, 3300), reason: '~2.5 s of quiet');
     final inDeck = deckOf('mixAAAAAAA2');
-    expect(outDeck.position.inMilliseconds, inInclusiveRange(plan.startAtMs - 50, plan.startAtMs + 400));
-    expect(inDeck.loads.last, contains('mixAAAAAAA2'));
-    // entered on its first beat (600 ms in), tempo nudged to match 124 bpm
+    // from its first sound (600 ms in), normal tempo, matched loudness (-14 LUFS: no turn-down)
     expect(inDeck.position.inMilliseconds, lessThan(600 + 500));
-    // the speed call reaches the deck a moment after the blend flag (under a
-    // busy full-suite run it was read one tick early): wait for it
-    await until(() => (inDeck.speed - 124 / 120).abs() < 0.002, ms: 1500, why: 'tempo nudged');
-    expect(inDeck.speed, closeTo(124 / 120, 0.002));
-    expect(p.current.value!.id, 'mixAAAAAAA2');
-    // both audible mid-blend, with the bass swap running
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
-    expect(outDeck.playing && inDeck.playing, isTrue);
-    expect(p.lowCutTrace.where((v) => v > 0), isNotEmpty);
-    await until(() => !p.inTransition, why: 'blend finished');
-    // the old deck's stop reaches the engine a moment after the blend ends
-    await until(() => !playingDecks().contains(outDeck), ms: 2000, why: 'old deck stopped');
-    expect(inDeck.volume, closeTo(1.0, 0.001)); // -14 LUFS: no turn-down
-    // tempo eases back to normal after the blend
-    await until(() => inDeck.speed == 1.0, ms: 7000, why: 'tempo eased back');
-    // bass cut swept up to full and cleared again
-    expect(p.lowCutTrace, contains(1.0));
-    expect(p.lowCutTrace.last, 0.0);
+    expect(inDeck.position.inMilliseconds, greaterThanOrEqualTo(550));
+    expect(inDeck.speed, 1.0);
+    expect(inDeck.volume, closeTo(1.0, 0.001));
   });
 
   test('skip during a blend: the old song stops, no stuck tempo or bass cut, next song plays', () async {
@@ -167,7 +162,10 @@ void main() {
       'skpAAAAAAA3': beatTrack(durMs: 30000, bpm: 120),
     });
     await p.playItems([s('skpAAAAAAA1', sec: 14), s('skpAAAAAAA2', sec: 30), s('skpAAAAAAA3', sec: 30)]);
-    await p.seek(const Duration(seconds: 7));
+    await until(() => playingDecks().length == 1);
+    await until(() => ax.ready.contains('skpAAAAAAA2'));
+    // 1.4.5: Automix itself no longer overlaps songs; the DJ's "Switch it up" still blends
+    await p.blendToNext(ms: 4000);
     await until(() => p.inTransition);
     await Future<void>.delayed(const Duration(milliseconds: 600));
     await p.skipToNext();
@@ -184,7 +182,9 @@ void main() {
     durations.addAll({'skAAAAAAAA1': 14000, 'skAAAAAAAA2': 30000});
     p = await build({'skAAAAAAAA1': beatTrack(durMs: 14000, bpm: 124), 'skAAAAAAAA2': beatTrack(durMs: 30000, bpm: 121)});
     await p.playItems([s('skAAAAAAAA1', sec: 14), s('skAAAAAAAA2', sec: 30)]);
-    await p.seek(const Duration(seconds: 7));
+    await until(() => playingDecks().length == 1);
+    await until(() => ax.ready.contains('skAAAAAAAA2'));
+    await p.blendToNext(ms: 4000); // the DJ's blend (Automix itself no longer overlaps)
     await until(() => p.inTransition);
     await Future<void>.delayed(const Duration(milliseconds: 500));
     await p.seek(const Duration(seconds: 10));
@@ -202,7 +202,9 @@ void main() {
     durations.addAll({'paAAAAAAAA1': 14000, 'paAAAAAAAA2': 30000});
     p = await build({'paAAAAAAAA1': beatTrack(durMs: 14000), 'paAAAAAAAA2': beatTrack(durMs: 30000)});
     await p.playItems([s('paAAAAAAAA1', sec: 14), s('paAAAAAAAA2', sec: 30)]);
-    await p.seek(const Duration(seconds: 7));
+    await until(() => playingDecks().length == 1);
+    await until(() => ax.ready.contains('paAAAAAAAA2'));
+    await p.blendToNext(ms: 4000); // the DJ's blend (Automix itself no longer overlaps)
     await until(() => p.inTransition);
     await Future<void>.delayed(const Duration(milliseconds: 400));
     await p.pause();
@@ -215,23 +217,20 @@ void main() {
     expect(playingDecks().single.volume, closeTo(loudnessGain(-12), 0.01));
   });
 
-  test('analysis fails: falls back to a plain crossfade, still moves on', () async {
+  test('analysis fails: still moves on (after the gap, no overlap)', () async {
     durations.addAll({'faAAAAAAAA1': 12000, 'faAAAAAAAA2': 30000});
     p = await build({}, failing: {'faAAAAAAAA1', 'faAAAAAAAA2'});
     await p.playItems([s('faAAAAAAAA1', sec: 12), s('faAAAAAAAA2', sec: 30)]);
     final plan = p.planFor(s('faAAAAAAAA1', sec: 12), s('faAAAAAAAA2', sec: 30), 12000);
     expect(plan.kind, 'fallback');
-    expect(plan.startAtMs, 8000);
-    await p.seek(const Duration(seconds: 6));
+    await p.seek(const Duration(seconds: 8));
     var overlap = false;
     await until(() {
       if (playingDecks().length == 2) overlap = true;
-      // done only when the new song's deck is the one left playing (the current
-      // song flips a moment before the incoming deck reports it is playing)
       final playing = playingDecks().toList();
       return p.current.value!.id == 'faAAAAAAAA2' && playing.length == 1 && (playing.first.uri?.contains('/faAAAAAAAA2/') ?? false);
     });
-    expect(overlap, isTrue);
+    expect(overlap, isFalse);
   });
 
   test('short songs (< 30 s): short blends, every song plays, ends at queue end', () async {
@@ -245,7 +244,7 @@ void main() {
     final seen = <String>[];
     p.current.addListener(() => seen.add(p.current.value!.id));
     await p.playItems([s('shAAAAAAAA1', sec: 9), s('shAAAAAAAA2', sec: 8), s('shAAAAAAAA3', sec: 7)]);
-    await until(() => p.current.value!.id == 'shAAAAAAAA3', ms: 20000);
+    await until(() => p.current.value!.id == 'shAAAAAAAA3', ms: 30000); // 1.4.5: 2.5 s between songs
     // the last song finishes and nothing else starts (queue end, autoplay off)
     await until(() => playingDecks().isEmpty, ms: 12000);
     expect(seen.toSet(), {'shAAAAAAAA1', 'shAAAAAAAA2', 'shAAAAAAAA3'});

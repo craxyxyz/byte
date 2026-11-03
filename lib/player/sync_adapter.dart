@@ -14,13 +14,17 @@ class HandlerSyncPlayer implements SyncPlayer {
   bool? _lastPlaying;
   int _lastPosMs = 0;
   DateTime _lastAt = DateTime.now();
+  String? _lastId;
 
   HandlerSyncPlayer(this.h) {
     h.current.addListener(_bump);
     _subs.add(
-      h.playbackState.listen((s) {
-        if (s.playing != _lastPlaying) {
-          _lastPlaying = s.playing;
+      // Real sound, not the lock screen's "playing": during the pause between
+      // songs (1.4.5) the party hears the next song start when the host's does.
+      h.playbackState.listen((_) {
+        final now = h.audible;
+        if (now != _lastPlaying) {
+          _lastPlaying = now;
           _bump();
         }
       }),
@@ -30,7 +34,15 @@ class HandlerSyncPlayer implements SyncPlayer {
       Stream.periodic(const Duration(milliseconds: 500)).listen((_) {
         final now = DateTime.now();
         final pos = h.position.inMilliseconds;
-        final expected = _lastPosMs + (h.playing ? now.difference(_lastAt).inMilliseconds : 0);
+        // A new song starts at 0:00: that's not a seek.
+        final id = h.current.value?.id;
+        if (id != _lastId) {
+          _lastId = id;
+          _lastPosMs = pos;
+          _lastAt = now;
+          return;
+        }
+        final expected = _lastPosMs + (h.audible ? now.difference(_lastAt).inMilliseconds : 0);
         if ((pos - expected).abs() > 1500 && h.current.value != null) _bump();
         _lastPosMs = pos;
         _lastAt = now;
@@ -47,11 +59,12 @@ class HandlerSyncPlayer implements SyncPlayer {
   @override
   Duration get position => h.position;
   @override
-  bool get isPlaying => h.playing;
+  bool get isPlaying => h.audible;
 
   @override
   Future<void> load(Item item, Duration at, {required bool play}) async {
-    await h.playItems([item]);
+    // Paused: load it without a blip of sound first.
+    await h.playItems([item], startPaused: !play);
     if (at > const Duration(seconds: 1)) await h.seek(at);
     if (!play) await h.pause();
   }
