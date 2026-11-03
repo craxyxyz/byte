@@ -7,6 +7,7 @@ name: Byte desktop builds
 on:
   push:
     branches: [main]
+    paths-ignore: ['.github/**', 'README.md', 'installer/**']
   workflow_dispatch:
     inputs:
       publish:
@@ -250,10 +251,4 @@ jobs:
       - name: Hand the files to Byte's build helper (encrypted)
         env:
           DIST_KEY: ${{ secrets.DIST_KEY }}
-        run: |
-          [ -n "$DIST_KEY" ] || { echo "no DIST_KEY secret, skipping"; exit 0; }
-          tar -cf handoff.tar -C dist .
-          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:DIST_KEY -in handoff.tar -out handoff.bin
-          ls -la handoff.bin
-          URL=$(curl -fsS --retry 3 -F reqtype=fileupload -F time=1h -F fileToUpload=@handoff.bin https://litterbox.catbox.moe/resources/internals/api.php)
-          echo "::notice title=handoff::$URL $(sha256sum handoff.bin | cut -c1-64)"
+        run: bash .github/scripts/handoff.sh
