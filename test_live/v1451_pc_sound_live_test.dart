@@ -142,6 +142,23 @@ void main() {
     await p.dispose();
   }, timeout: const Timeout(Duration(seconds: 60)));
 
+  test('a new song loaded while one plays keeps playing (Next / tapping a song): the speaker is loud', () async {
+    // 1.4.5 desktop: the player loaded the new song paused, but the app still
+    // counted it as playing and never sent play again: progress moved, silent.
+    final p = await start();
+    p.play();
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    await p.setAudioSource(AudioSource.uri(Uri.file(song)), initialPosition: const Duration(seconds: 5));
+    await p.setVolume(1);
+    await p.play(); // what the app does: a no-op while just_audio counts it as playing
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    final db = await level(2);
+    stdout.writeln('[sound] next song while playing: ${db?.toStringAsFixed(1)} dB, playing=${p.playing}, pos=${p.position}');
+    expect(p.playing, isTrue);
+    if (db != null) expect(db, greaterThan(-40), reason: 'silent after loading the next song: $db dB');
+    await p.dispose();
+  }, timeout: const Timeout(Duration(seconds: 60)));
+
   test('a player that refuses a chain: filters off, the song gets its sound back', () async {
     ByteDesktopAudio.filtersSupported = true; // pretend, so the chain is sent
     final p = await start();

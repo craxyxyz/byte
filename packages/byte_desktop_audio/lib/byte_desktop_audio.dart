@@ -348,7 +348,11 @@ class _DesktopPlayer extends AudioPlayerPlatform {
         mk.Media(srcs[i].uri, httpHeaders: srcs[i].headers, start: i == _index && start != null && start > Duration.zero ? start : null),
     ];
     _medias = medias;
-    await p.open(mk.Playlist(medias, index: _index), play: false);
+    // 1.4.5.1: a song loaded while the player plays starts playing (what
+    // just_audio expects of every player: it doesn't send play again while it
+    // counts itself as playing). Opening it paused made Next / tapping a song
+    // on a computer go silent while the progress bar kept moving.
+    await p.open(mk.Playlist(medias, index: _index), play: _playWanted);
     try {
       await _ready.future.timeout(const Duration(seconds: 30));
     } on TimeoutException {
@@ -366,12 +370,17 @@ class _DesktopPlayer extends AudioPlayerPlatform {
     if (_state == ProcessingStateMessage.completed) {
       _state = ProcessingStateMessage.ready;
     }
+    _playWanted = true;
     await p.play();
     return PlayResponse();
   }
 
+  /// just_audio's play / pause intent (it survives loading another song).
+  bool _playWanted = false;
+
   @override
   Future<PauseResponse> pause(PauseRequest request) async {
+    _playWanted = false;
     await _p?.pause();
     return PauseResponse();
   }
