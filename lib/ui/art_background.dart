@@ -1,6 +1,8 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 
 import '../core/models.dart';
@@ -26,9 +28,18 @@ class _ArtBackgroundState extends State<ArtBackground> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    if (widget.animate) _t.repeat();
     Services.i.player.current.addListener(_update);
     _update();
+  }
+
+  /// 1.4.5.2 (computer lag): the drift clock only runs while the drifting
+  /// blobs are actually on screen. It used to tick every frame even with the
+  /// calm (default) background, so the whole player redrew 60–120 times a
+  /// second, paused or not.
+  void _clock(bool mesh) {
+    final want = widget.animate && mesh;
+    if (want && !_t.isAnimating) _t.repeat();
+    if (!want && _t.isAnimating) _t.stop();
   }
 
   @override
@@ -50,6 +61,8 @@ class _ArtBackgroundState extends State<ArtBackground> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     final it = Services.i.player.current.value;
+    final mesh = Services.i.settings.meshGradient;
+    _clock(mesh);
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -59,7 +72,7 @@ class _ArtBackgroundState extends State<ArtBackground> with SingleTickerProvider
           tween: _PalTween(end: ArtPaletteTween(palette)),
           // Legacy mesh gradient = the drifting colour blobs; otherwise a calm
           // top-to-bottom wash of the cover's colours.
-          builder: (context, p, _) => Services.i.settings.meshGradient
+          builder: (context, p, _) => mesh
               ? AnimatedBuilder(
                   animation: _t,
                   builder: (context, _) => CustomPaint(painter: _BlobPainter(p.p, _t.value)),
@@ -78,7 +91,7 @@ class _ArtBackgroundState extends State<ArtBackground> with SingleTickerProvider
                   ),
                 ),
         ),
-        if (it?.thumb != null)
+        if (it?.thumb != null && kIsWeb)
           Opacity(
             opacity: 0.32,
             child: ImageFiltered(
@@ -87,6 +100,16 @@ class _ArtBackgroundState extends State<ArtBackground> with SingleTickerProvider
                 duration: const Duration(milliseconds: 700),
                 child: _CoverFill(key: ValueKey(it!.id), item: it),
               ),
+            ),
+          )
+        else if (it?.thumb != null)
+          // 1.4.5.2: the cover is blurred ONCE per song into a small image and
+          // that image is stretched over the window, instead of a live
+          // full-window blur + transparency layer redone on every frame.
+          RepaintBoundary(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 700),
+              child: BlurredCover(key: ValueKey(it!.id), url: it.thumbAt(226)),
             ),
           ),
         const DecoratedBox(decoration: BoxDecoration(color: Color(0x33000000))),
@@ -112,6 +135,94 @@ class _CoverFill extends StatelessWidget {
 class ArtPaletteTween {
   final ArtPalette p;
   const ArtPaletteTween(this.p);
+  // 1.4.5.2: equal colours = the same tween, so a rebuild doesn't restart the
+  // 0.9 s colour fade (it did on every rebuild of the player).
+  @override
+  bool operator ==(Object other) => other is ArtPaletteTween && other.p.primary == p.primary && other.p.secondary == p.secondary && other.p.tertiary == p.tertiary;
+  @override
+  int get hashCode => Object.hash(p.primary, p.secondary, p.tertiary);
+}
+
+/// 1.4.5.2: the player's blurred cover backdrop, made once per song: the
+/// cover is decoded tiny ([texels] wide), blurred into a small image, and that
+/// image is drawn stretched over the window at 32 % strength. Looks the same
+/// as a 60 px blur of the full cover; costs one textured rectangle per frame.
+class BlurredCover extends StatefulWidget {
+  final String? url;
+  const BlurredCover({super.key, required this.url});
+
+  static const int texels = 64;
+
+  /// Blur in texels of the small image (≈ a 60 px blur on a laptop window).
+  static const double sigma = 3.2;
+
+  /// Blurs [src] (already small) into a new image of the same size.
+  @visibleForTesting
+  static ui.Image blur(ui.Image src) {
+    final rec = ui.PictureRecorder();
+    Canvas(rec).drawImage(src, Offset.zero, Paint()..imageFilter = ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma, tileMode: TileMode.mirror));
+    final pic = rec.endRecording();
+    try {
+      return pic.toImageSync(src.width, src.height);
+    } finally {
+      pic.dispose();
+    }
+  }
+
+  @override
+  State<BlurredCover> createState() => _BlurredCoverState();
+}
+
+class _BlurredCoverState extends State<BlurredCover> {
+  ImageStream? _stream;
+  ImageStreamListener? _l;
+  ui.Image? _img;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_stream == null) _resolve();
+  }
+
+  void _resolve() {
+    final p = imageProviderFor(widget.url);
+    if (p == null) return;
+    final stream = ResizeImage(p, width: BlurredCover.texels).resolve(createLocalImageConfiguration(context));
+    _l = ImageStreamListener((info, _) {
+      if (!mounted) {
+        info.dispose();
+        return;
+      }
+      ui.Image out;
+      try {
+        out = BlurredCover.blur(info.image);
+      } catch (_) {
+        out = info.image.clone();
+      }
+      info.dispose();
+      setState(() {
+        _img?.dispose();
+        _img = out;
+      });
+    }, onError: (_, _) {});
+    _stream = stream..addListener(_l!);
+  }
+
+  @override
+  void dispose() {
+    if (_l != null) _stream?.removeListener(_l!);
+    _img?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final img = _img;
+    if (img == null) return const SizedBox.expand();
+    return SizedBox.expand(
+      child: RawImage(image: img, fit: BoxFit.cover, filterQuality: FilterQuality.medium, color: const Color.fromRGBO(255, 255, 255, 0.32), colorBlendMode: BlendMode.modulate),
+    );
+  }
 }
 
 class _PalTween extends Tween<ArtPaletteTween> {

@@ -15,6 +15,7 @@ import 'package:path_provider/path_provider.dart';
 import 'core/cover_cache.dart';
 import 'core/crash_log.dart';
 import 'core/frame_log.dart';
+import 'core/desktop_perftest.dart';
 import 'brand.dart';
 import 'core/innertube.dart';
 import 'core/net.dart';
@@ -48,6 +49,7 @@ import 'web/no_webview.dart';
 import 'web/web_proxy.dart';
 import 'ui/app_fullscreen.dart' show AppFullscreen;
 import 'package:window_manager/window_manager.dart';
+import 'ui/smooth_wheel.dart';
 
 class HiveLyricsCache implements LyricsCache {
   final Box box;
@@ -72,7 +74,8 @@ bool get desktopNoMediaSession => !kIsWeb && (Platform.isWindows || Platform.isL
 AppLifecycleListener? partyLifecycle;
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // 1.4.5.2: the normal binding + smooth mouse-wheel scrolling on computers.
+  ByteBinding.ensureInitialized();
   // Windows/Linux: songs play through Byte's desktop audio backend.
   ByteDesktopAudio.register();
   // 1.4.5: and the Audio Lab through the computer player's filters.
@@ -178,7 +181,7 @@ Future<void> main() async {
   SpotifyAccount.webRefresher = refreshSpotifyQuietly;
   await Services.i.wireSources();
   // A fresh install starts with the welcome (an update never does).
-  ByteApp.welcome = !kIsWeb && !settings.onboarded && Services.i.library.likes.isEmpty && Services.i.library.history.isEmpty;
+  ByteApp.welcome = !kIsWeb && !settings.onboarded && Services.i.library.likes.isEmpty && Services.i.library.history.isEmpty && Platform.environment['BYTE_PERFTEST'] != '1';
   if (!ByteApp.welcome) settings.onboarded = true;
   // Storage → Song cache limit.
   Services.i.automix?.maxBytes = settings.songCacheMb * 1048576;
@@ -193,6 +196,8 @@ Future<void> main() async {
   labEngine.watch([for (final p in handler.decks) p.androidAudioSessionIdStream]);
   IosSoundBackend.restoreClassic = () => unawaited(equalizer.apply());
   unawaited(labEngine.start());
+  // 1.4.5.2: desktop smoothness check (CI only, BYTE_PERFTEST=1)
+  if (!kIsWeb && Platform.environment['BYTE_PERFTEST'] == '1') unawaited(DesktopPerfTest.run());
   handler.pauseFadeMs = () => Services.i.lab.fadeOnPause ? Services.i.lab.fadeMs : 0;
   handler.keepTogether = (a, b) => Services.i.lab.keepTogether(a.albumId ?? a.album, b.albumId ?? b.album);
   void applyPitch() => unawaited(handler.setPitch(Services.i.lab.pitchFor(settings.speed)));

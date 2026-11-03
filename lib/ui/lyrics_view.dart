@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -423,6 +424,69 @@ int? playingDurationSec(Item it) {
   }
 }
 
+/// 1.4.5.2 (computer lag): the lyric clocks ran a per-frame ticker forever,
+/// so a screen with lyrics redrew at the display's refresh rate even when the
+/// song was paused. [LyricsPace] keeps the per-frame ticker only while the
+/// song plays (or [busy] says something is moving, e.g. a scroll glide);
+/// paused, it checks 4 times a second instead, which draws nothing unless the
+/// line actually changes (a seek while paused). On computers a playing song's
+/// lyrics move 30 times a second ([playingStepMs]).
+class LyricsPace {
+  final Ticker ticker;
+  final VoidCallback onTick;
+  final bool Function()? busy;
+  Timer? _poll;
+
+  /// Whether the song is playing (tests replace it).
+  static bool Function() isPlaying = () {
+    try {
+      return Services.i.player.playing;
+    } catch (_) {
+      return true;
+    }
+  };
+
+  LyricsPace(this.ticker, this.onTick, {this.busy});
+
+  /// True while the per-frame ticker runs.
+  bool get perFrame => ticker.isActive;
+
+  /// Computers (Windows / Linux): while a song plays, the lyrics move 30
+  /// times a second on a timer instead of on every screen refresh (60–144 on
+  /// laptops), which halves or quarters the drawing work. 0 = every frame.
+  static int playingStepMs = !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux) ? 33 : 0;
+  int _pollMs = 0;
+
+  /// Call at the end of every tick (ticker or timer).
+  void update() {
+    final playing = isPlaying();
+    if ((busy?.call() ?? false) || (playing && playingStepMs == 0)) {
+      if (!ticker.isActive) wake();
+      return;
+    }
+    if (ticker.isActive) ticker.stop();
+    final ms = playing ? playingStepMs : 250;
+    if (_poll == null || _pollMs != ms) {
+      _poll?.cancel();
+      _pollMs = ms;
+      _poll = Timer.periodic(Duration(milliseconds: ms), (_) => onTick());
+    }
+  }
+
+  /// Per frame again right away (a new song, a glide, play); the next tick
+  /// settles on the right pace.
+  void wake() {
+    _poll?.cancel();
+    _poll = null;
+    if (!ticker.isActive) ticker.start();
+  }
+
+  void dispose() {
+    _poll?.cancel();
+    _poll = null;
+  }
+}
+
 /// The player's position for lyrics: the smooth clock plus the person's
 /// timing nudges (Settings, and this song's own from the source sheet).
 int lyricsNowMs() {
@@ -772,10 +836,20 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> with SingleTickerPr
     LyricsPane.selection.addListener(_selChanged);
     _init();
     _ticker = createTicker((e) {
-      _tickMs = e.inMilliseconds;
+      // the ticker restarts at 0 after a pause: keep [_tickMs] going up
+      final el = e.inMilliseconds;
+      if (el < _lastEl) _tickBase = _tickMs;
+      _lastEl = el;
+      _tickMs = _tickBase + el;
       _frame();
     })..start();
   }
+
+  int _tickBase = 0, _lastEl = 0;
+
+  /// 1.4.5.2: per frame only while playing or gliding (see [LyricsPace]); a
+  /// custom clock ([SyncedLyricsView.now]) always runs per frame.
+  late final LyricsPace _pace = LyricsPace(_ticker, _frame, busy: () => widget.now != null || _glideTo != null);
 
   void _init() {
     final lines = widget.lyrics.lines;
@@ -803,6 +877,7 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> with SingleTickerPr
   void dispose() {
     LyricsPane.resync.removeListener(_resyncNow);
     LyricsPane.selection.removeListener(_selChanged);
+    _pace.dispose();
     _ticker.dispose();
     _resume?.cancel();
     scroll.dispose();
@@ -827,6 +902,7 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> with SingleTickerPr
   }
 
   void _frame() {
+    if (!mounted) return;
     _glide();
     final ms = _now();
     nowMs.value = ms;
@@ -835,6 +911,7 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> with SingleTickerPr
       setState(() => active = i);
       if (!_userScrolling) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActive());
     }
+    _pace.update();
   }
 
   void _scrollToActive({bool animate = true}) {
@@ -857,6 +934,7 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> with SingleTickerPr
       _glideFrom = scroll.offset;
       _glideTo = target;
       _glideStart = _tickMs;
+      _pace.wake();
     }
   }
 
@@ -1079,7 +1157,10 @@ class _LineView extends StatelessWidget {
         ],
       );
     }
-    return GestureDetector(
+    // 1.4.5.2: each line is its own layer, so the line being sung (redrawn
+    // every frame) doesn't make the blurred / faded lines redraw with it.
+    return RepaintBoundary(
+      child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       onLongPress: onLongPress,
@@ -1111,7 +1192,7 @@ class _LineView extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 

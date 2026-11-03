@@ -100,6 +100,15 @@ jobs:
           print('::notice title=sound check::'+msg.replace('%','%25').replace('\r','').replace('\n','%0A'))
           EOF
           grep -q "All tests passed" sound.log
+      # 1.4.5.2: smoothness gate (1.4.5-pc1 lagged and ran hot on a laptop):
+      # the real Byte.exe plays a song with lyrics and a cover; a paused screen
+      # must draw (almost) nothing, the open player must not redraw at the
+      # screen's full refresh rate. Frames + the app's CPU, per screen.
+      - name: Smoothness check (frames and CPU, playing and paused)
+        shell: bash
+        run: |
+          pip install -q psutil
+          python .github/scripts/perf_check.py build/windows/x64/runner/Release/Byte.exe
       - name: Zip
         shell: pwsh
         run: |
@@ -293,7 +302,7 @@ jobs:
           prerelease: ${{ !inputs.publish }}
           body: |
             Byte ${{ env.BYTE_VERSION }} for Windows, macOS, Linux and iPhone (unsigned).
-            ${{ inputs.tag != '' && 'Fix release for the computer apps: sound on Windows is back (the Audio Lab filters silenced it), lighter playback.' || '' }}
+            ${{ inputs.tag != '' && 'Fix release for the computer apps: sound on Windows is back (the Audio Lab filters silenced it); the player no longer redraws nonstop (smoother, cooler laptop); smooth mouse-wheel scrolling.' || '' }}
             Windows: run Byte-Setup, or unzip and open Byte.exe. If SmartScreen appears: More info → Run anyway.
             macOS: open the .dmg and drag Byte to Applications. First launch: right-click Byte → Open (or System Settings → Privacy & Security → Open Anyway).
             Linux: extract the .tar.gz and run ./byte (needs libmpv: sudo apt install libmpv2), or run the AppImage.

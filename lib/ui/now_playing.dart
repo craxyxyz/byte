@@ -1138,8 +1138,54 @@ class Marquee extends StatefulWidget {
 class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
   late final AnimationController a = AnimationController(vsync: this);
   double overflow = 0;
+
+  // 1.4.5.2 (computer lag): the waits at each end are timers (no drawing);
+  // only the scroll itself animates, and only while a song plays. It used to
+  // be one endless animation that redrew the player every frame, paused or not.
+  Timer? _wait;
+  int _cycle = 0;
+
+  void _stop() {
+    _cycle++;
+    _wait?.cancel();
+    if (a.isAnimating) a.stop();
+  }
+
+  void _start(double over) {
+    _stop();
+    final id = _cycle;
+    final secs = 3 + over / 30;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || id != _cycle) return;
+      a.value = 0;
+      _hold(id, secs);
+    });
+  }
+
+  void _hold(int id, double secs) {
+    _wait = Timer(Duration(milliseconds: (secs * 250).round()), () async {
+      if (!mounted || id != _cycle) return;
+      if (!LyricsPace.isPlaying()) {
+        _hold(id, secs);
+        return;
+      }
+      try {
+        await a.animateTo(1, duration: Duration(milliseconds: (secs * 550).round()), curve: Curves.easeInOut).orCancel;
+      } catch (_) {
+        return;
+      }
+      if (!mounted || id != _cycle) return;
+      _wait = Timer(Duration(milliseconds: (secs * 200).round()), () {
+        if (!mounted || id != _cycle) return;
+        a.value = 0;
+        _hold(id, secs);
+      });
+    });
+  }
+
   @override
   void dispose() {
+    _stop();
     a.dispose();
     super.dispose();
   }
@@ -1155,15 +1201,13 @@ class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
         )..layout();
         final over = tp.width - c.maxWidth;
         if (over <= 0) {
-          if (a.isAnimating) a.stop();
+          if (overflow != 0) _stop();
+          overflow = 0;
           return Text(widget.text, maxLines: 1, style: widget.style);
         }
         if (over != overflow) {
           overflow = over;
-          final secs = 3 + over / 30;
-          a
-            ..duration = Duration(milliseconds: (secs * 1000).round())
-            ..repeat();
+          _start(over);
         }
         return ClipRect(
           child: SizedBox(
@@ -1171,9 +1215,8 @@ class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
             child: AnimatedBuilder(
               animation: a,
               builder: (context, _) {
-                // pause 25% at the start, scroll, pause, jump back
-                final v = a.value;
-                final p = v < 0.25 ? 0.0 : (v < 0.8 ? Curves.easeInOut.transform((v - 0.25) / 0.55) : 1.0);
+                // wait at the start, scroll, wait, jump back (see _hold)
+                final p = a.value;
                 return Transform.translate(
                   offset: Offset(-p * (over + 8), 0),
                   child: OverflowBox(
@@ -1222,7 +1265,9 @@ class _SeekBarState extends State<SeekBar> {
     final pos = _drag ?? p.clock.nowMs.toDouble().clamp(0.0, dur <= 0 ? 0.0 : dur);
     final buffered = p.activePlayer.bufferedPosition.inMilliseconds.toDouble().clamp(0.0, dur <= 0 ? 0.0 : dur);
     final small = Theme.of(context).textTheme.bodySmall!.copyWith(color: Colors.white70, fontFeatures: const [FontFeature.tabularFigures()]);
-    return Column(
+    // 1.4.5.2: redrawn 4×/s on its own layer, not with the whole player
+    return RepaintBoundary(
+      child: Column(
       children: [
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
@@ -1266,7 +1311,7 @@ class _SeekBarState extends State<SeekBar> {
             ],
           ),
       ],
-    );
+    ));
   }
 }
 

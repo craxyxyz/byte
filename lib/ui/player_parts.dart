@@ -15,7 +15,7 @@ import '../core/platform_caps.dart';
 import '../data/audio_format.dart';
 import '../lyrics/dual.dart' show lyricsNeedDual;
 import '../lyrics/lrc.dart';
-import 'lyrics_view.dart' show lyricsNowMs, lyricsInLook, defaultLookFor, LyricsLook, LyricsPane, playingDurationSec;
+import 'lyrics_view.dart' show LyricsPace, lyricsNowMs, lyricsInLook, defaultLookFor, LyricsLook, LyricsPane, playingDurationSec;
 import '../player/audio_route.dart';
 import '../player/byte_handler.dart';
 import '../player/queue.dart' as q;
@@ -543,6 +543,7 @@ class _NextLyricLineState extends State<NextLyricLine> with SingleTickerProvider
   void dispose() {
     Services.i.player.current.removeListener(_load);
     LyricsPane.reload.removeListener(_reload);
+    _pace.dispose();
     _ticker.dispose();
     _ms.dispose();
     super.dispose();
@@ -576,7 +577,7 @@ class _NextLyricLineState extends State<NextLyricLine> with SingleTickerProvider
       _loading = false;
     });
     _tick();
-    if (_clock != null && !_ticker.isActive) _ticker.start();
+    if (_clock != null) _pace.wake();
     if (look == LyricsLook.dual || (look == LyricsLook.romanized && lyricsNeedDual(l))) {
       // the spelling from a Roman-letter version of the song, when one matches
       try {
@@ -608,7 +609,12 @@ class _NextLyricLineState extends State<NextLyricLine> with SingleTickerProvider
     final i = lineFor(c, ms);
     if (i != _idx) setState(() => _idx = i);
     _ms.value = ms;
+    _pace.update();
   }
+
+  /// 1.4.5.2: per frame only while the song plays; paused, a 4×/s check
+  /// (which draws nothing unless the line changes, e.g. after a seek).
+  late final LyricsPace _pace = LyricsPace(_ticker, _tick);
 
   @override
   Widget build(BuildContext context) {
