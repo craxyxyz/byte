@@ -83,6 +83,22 @@ void main() {
     expect(fake.loads.last, 'webB2');
   });
 
+  test('an upload that refuses: the same song\'s other upload plays instead', () async {
+    out.dispose();
+    out = WebEmbedOutput(sv.player, bridge: fake, alternates: (it) async => ['${it.id}-alt1', '${it.id}-alt2']);
+    sv.player.remote = out;
+    await sv.player.playItems([_song('webD1'), _song('webD2')]);
+    fake.st = {...fake.st, 'e': 150};
+    out.tick();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(fake.loads, ['webD1', 'webD1-alt1']);
+    expect(sv.player.error.value, isNull, reason: 'no message while another upload is tried');
+    fake.st = {...fake.st, 'e': 0, 's': 1, 't': 2.0};
+    out.tick();
+    expect(sv.player.playing, isTrue);
+    expect(sv.player.current.value?.id, 'webD1', reason: 'still the same song in the queue');
+  });
+
   test('blocked script: says so, doesn\'t skip through the queue', () async {
     await sv.player.playItems([_song('webA3'), _song('webB3')]);
     fake.st = {...fake.st, 'e': 'api'};

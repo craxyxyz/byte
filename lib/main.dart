@@ -43,6 +43,7 @@ import 'player/home_widget_sync.dart';
 import 'web/no_webview.dart';
 import 'web/web_proxy.dart';
 import 'web/embed_output.dart';
+import 'core/models.dart' show SearchFilter;
 import 'ui/smooth_wheel.dart';
 
 class HiveLyricsCache implements LyricsCache {
@@ -106,7 +107,17 @@ Future<void> main() async {
     config: byteAudioConfig,
   );
   // 2.0 web: the official embedded player makes the sound (visible, small)
-  if (kIsWeb && EmbedBridge().available()) handler.remote = WebEmbedOutput(handler);
+  if (kIsWeb && EmbedBridge().available()) {
+    handler.remote = WebEmbedOutput(
+      handler,
+      alternates: (it) async {
+        final q = '${it.title} ${it.artistLine}';
+        final songs = await yt.search(q, SearchFilter.songs);
+        final videos = await yt.search(q, SearchFilter.videos);
+        return [for (final x in [...songs.take(3), ...videos.take(4)]) x.id];
+      },
+    );
+  }
   try {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());

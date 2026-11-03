@@ -31,7 +31,17 @@ class WebEmbedOutput implements RemoteOutput {
   /// How long a song may take to start before Byte says so.
   static Duration startLimit = const Duration(milliseconds: 4500);
 
-  WebEmbedOutput(this.player, {EmbedBridge? bridge}) : b = bridge ?? EmbedBridge();
+  WebEmbedOutput(this.player, {EmbedBridge? bridge, this.alternates}) : b = bridge ?? EmbedBridge();
+
+  /// Other uploads of the same song (official audio, lyric video, the
+  /// artist's own): tried in turn when an upload refuses to play here.
+  final Future<List<String>> Function(Item it)? alternates;
+  Item? _item;
+  final List<String> _tried = [];
+  List<String>? _alts;
+
+  /// How many other uploads Byte tries before it skips a song.
+  static int maxAlternates = 3;
 
   Timer? _poll;
   bool _playing = false, _wantPlay = false, _started = false, _failed = false;
@@ -73,6 +83,11 @@ class WebEmbedOutput implements RemoteOutput {
       return;
     }
     _id = it.id;
+    _item = it;
+    _tried
+      ..clear()
+      ..add(it.id);
+    _alts = null;
     _ended = (b.snap()['n'] as num?)?.toInt() ?? 0;
     _wantPlay = true;
     _loadedAt = DateTime.now();
@@ -113,10 +128,13 @@ class WebEmbedOutput implements RemoteOutput {
     final s = b.snap();
     if (s.isEmpty) return;
     final e = s['e'];
+    if (_looking) return;
     if (e != null && e != 0 && !_failed) {
       // 2/5/100/101/150: this video can't play embedded (or is gone)
       if (e == 'api') {
         _fail(blocked, skip: false);
+      } else if (alternates != null && _item != null && _tried.length <= maxAlternates) {
+        unawaited(_tryAlternate(_item!));
       } else {
         _fail(cantPlay, skip: true);
       }
@@ -152,6 +170,32 @@ class WebEmbedOutput implements RemoteOutput {
     }
     if (was != (_playing, _pos ~/ 1000, _dur)) player.remoteChanged();
     if (!_wantPlay && state != 1 && state != 3) _stopPoll();
+  }
+
+  bool _looking = false;
+
+  /// This upload refused: the next upload of the same song, or skip.
+  Future<void> _tryAlternate(Item it) async {
+    if (_looking) return;
+    _looking = true;
+    try {
+      _alts ??= await alternates!(it).timeout(const Duration(seconds: 3), onTimeout: () => const <String>[]);
+      if (_item?.id != it.id) return; // moved on meanwhile
+      final next = _alts!.where((id) => !_tried.contains(id)).firstOrNull;
+      if (next == null || _tried.length > maxAlternates) {
+        _fail(cantPlay, skip: true);
+        return;
+      }
+      _tried.add(next);
+      _id = next;
+      _loadedAt = DateTime.now();
+      b.load(next, _pos / 1000);
+      // the refusal of the last upload is forgotten by the page's script on load
+    } catch (_) {
+      _fail(cantPlay, skip: true);
+    } finally {
+      _looking = false;
+    }
   }
 
   @override
