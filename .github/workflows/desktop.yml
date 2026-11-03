@@ -7,7 +7,7 @@ name: Byte desktop builds
 on:
   push:
     branches: [main]
-    paths-ignore: ['.github/**', 'README.md', 'installer/**']
+    paths-ignore: ['.github/**', 'README.md', 'installer/**', 'test_shots/**', 'test_live/**']
   workflow_dispatch:
     inputs:
       publish:
