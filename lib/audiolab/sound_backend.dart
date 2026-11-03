@@ -193,11 +193,11 @@ class IosSoundBackend extends SoundBackend {
   /// What was last sent (tests).
   Map<String, Object?>? lastEq, lastChannels;
 
-  static List<double> gainsFor(AudioLab lab) => [for (final f in bands) EqMath.curveDb(lab.nodes, f).clamp(-15.0, 15.0)];
+  static List<double> gainsFor(AudioLab lab) => [for (final f in bands) EqMath.curveDb(lab.activeNodes, f).clamp(-15.0, 15.0)];
 
   @override
   Future<void> apply(AudioLab lab, Map<String, Object?> config) async {
-    final on = lab.eqOn;
+    final on = lab.anyEq;
     final was = labOwnsEq;
     labOwnsEq = on;
     if (on) {

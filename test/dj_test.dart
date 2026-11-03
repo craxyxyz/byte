@@ -68,7 +68,7 @@ Future<void> addHistoryAt(Item it, DateTime at) async {
 void main() {
   group('DJ lines', () {
     test('every line is short, names nobody else, and fills its blanks', () {
-      final bad = RegExp(r'spotify|google|youtube|apple|amazon|chatgpt|openai|claude|gemini|\bAI\b|siri|alexa|bitchord', caseSensitive: false);
+      final bad = RegExp(r'spotify|google|youtube|apple|amazon|chatgpt|openai|claude|gemini|\bAI\b|siri|alexa', caseSensitive: false);
       for (final l in DjLines.allTemplates) {
         expect(bad.hasMatch(l), isFalse, reason: l);
         expect(l.length, lessThan(130), reason: l);

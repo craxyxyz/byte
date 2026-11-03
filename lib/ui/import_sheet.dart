@@ -224,7 +224,7 @@ class _ImportScreenState extends State<ImportScreen> {
                           : () async {
                               final d = await Clipboard.getData('text/plain');
                               final t = d?.text?.trim();
-                              if (t != null) setState(() => ctrl.text = firstLink(t) ?? t);
+                              if (t != null && mounted) setState(() => ctrl.text = firstLink(t) ?? t);
                             },
                       child: Text('Paste', style: BT.bodyStrong.copyWith(color: p.accent)),
                     ),
@@ -407,7 +407,7 @@ class _PasteListScreenState extends State<_PasteListScreen> {
   Future<void> _paste() async {
     final d = await Clipboard.getData(Clipboard.kTextPlain);
     final t = d?.text?.trim();
-    if (t == null || t.isEmpty) return;
+    if (t == null || t.isEmpty || !mounted) return;
     ctrl.text = ctrl.text.trim().isEmpty ? t : '${ctrl.text.trimRight()}\n$t';
     ctrl.selection = TextSelection.collapsed(offset: ctrl.text.length);
     setState(() => _nudge = false);
@@ -590,7 +590,7 @@ class _ImportReviewScreenState extends State<ImportReviewScreen> {
             m: shown[i],
             onTap: () async {
               await showRepickSheet(context, shown[i]);
-              setState(() {});
+              if (mounted) setState(() {});
             },
           ),
         ),

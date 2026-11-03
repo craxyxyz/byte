@@ -1,6 +1,6 @@
 // BYTE_PROXY_NO_SERVE=1 deno test -A supabase/functions/byte-proxy/index_test.ts
 import { assert, assertEquals } from 'jsr:@std/assert@1';
-import { checkTarget, handle, hostAllowed, parseRange, pickFormat, RateLimiter, upstreamHeaders } from './index.ts';
+import { BOT_BLOCKED, checkTarget, handle, hostAllowed, isBotPage, parseRange, pickFormat, RateLimiter, upstreamHeaders } from './index.ts';
 
 Deno.test('allowlist', () => {
   assert(hostAllowed('music.youtube.com'));
@@ -144,5 +144,38 @@ Deno.test('play over HTTP: a browser-style Range read gets the exact bytes', asy
     globalThis.fetch = real;
     ac.abort();
     await srv.finished;
+  }
+});
+
+// 1.4.6: the catalogue answers the Supabase server's address with a "Sorry…"
+// robot-check page for /player (every client, every host); search still works.
+const SORRY = '<html><head><meta http-equiv="content-type" content="text/html; charset=utf-8"/><title>Sorry...</title></head><body>unusual traffic</body></html>';
+
+Deno.test('robot-check page is recognised; JSON answers are not', () => {
+  assert(isBotPage(403, 'text/html; charset=utf-8', SORRY));
+  assert(isBotPage(429, null, '<html>x</html>'));
+  assert(isBotPage(200, 'text/html', SORRY));
+  assert(!isBotPage(200, 'application/json', '{"playabilityStatus":{"status":"OK"}}'));
+  assert(!isBotPage(403, 'application/json', '{"error":{"code":403}}'));
+});
+
+Deno.test('?play answers 503 "blocked: bot check" (not a JSON parse error) when the catalogue shows its robot page', async () => {
+  const real = globalThis.fetch;
+  let playerCalls = 0;
+  globalThis.fetch = ((input: Request | URL | string) => {
+    const u = String(input instanceof Request ? input.url : input);
+    if (u.includes('/youtubei/v1/player')) playerCalls++;
+    if (u.includes('sw.js_data')) return Promise.resolve(new Response(')]}\'\n[]', { status: 200 }));
+    return Promise.resolve(new Response(SORRY, { status: 403, headers: { 'content-type': 'text/html; charset=utf-8' } }));
+  }) as typeof fetch;
+  try {
+    const r = await handle(new Request('http://x/?play=dQw4w9WgXcQ', { headers: { 'x-forwarded-for': '10.9.9.9' } }));
+    assertEquals(r.status, 503);
+    const j = await r.json();
+    assertEquals(j.error, BOT_BLOCKED);
+    assert(String(j.error).includes('bot check'));
+    assertEquals(playerCalls, 1, 'stops after the first robot page instead of trying every client');
+  } finally {
+    globalThis.fetch = real;
   }
 });

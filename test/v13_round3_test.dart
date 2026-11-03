@@ -117,7 +117,18 @@ void main() {
       return double.parse(m!.group(1)!);
     }
 
-    testWidgets('on by default: blur + bright edge', (t) async {
+    // 2.0: no live blur by default (smooth scrolling); the frosted look is a
+    // denser tint + the bright edge. Real glass blur is an opt-in setting.
+    testWidgets('2.0 default: frosted tint + bright edge, no live blur', (t) async {
+      expect(sv.settings.realBlur, isFalse);
+      await t.pumpWidget(host(box));
+      expect(find.byType(BackdropFilter), findsNothing);
+      expect(find.byKey(const ValueKey('glass-edge')), findsOneWidget);
+    });
+
+    testWidgets('on with Real glass blur: blur + bright edge', (t) async {
+      sv.settings.realBlur = true;
+      addTearDown(() => sv.settings.realBlur = false);
       expect(sv.settings.liquidGlass, isTrue);
       await t.pumpWidget(host(box));
       expect(find.byType(BackdropFilter), findsOneWidget);
@@ -126,6 +137,8 @@ void main() {
     });
 
     testWidgets('low-RAM phone: lighter blur', (t) async {
+      sv.settings.realBlur = true;
+      addTearDown(() => sv.settings.realBlur = false);
       GlassPerf.applyDeviceInfo({'lowRam': true, 'totalMemMb': 1900});
       expect(GlassPerf.light.value, isTrue);
       await t.pumpWidget(host(box));

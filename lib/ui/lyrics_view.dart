@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +21,7 @@ import '../player/screen_awake.dart';
 import 'widgets.dart' show toast;
 import '../services.dart';
 import 'glass.dart';
+import 'kit/fill_text.dart';
 
 /// Loads lyrics for the song playing and shows them, with romanize /
 /// translate buttons and a "Lyrics · <source>" link that opens the provider picker.
@@ -451,10 +451,13 @@ class LyricsPace {
   /// True while the per-frame ticker runs.
   bool get perFrame => ticker.isActive;
 
-  /// Computers (Windows / Linux): while a song plays, the lyrics move 30
-  /// times a second on a timer instead of on every screen refresh (60–144 on
-  /// laptops), which halves or quarters the drawing work. 0 = every frame.
-  static int playingStepMs = !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux) ? 33 : 0;
+  /// While a song plays, the lyrics move 30 times a second on a timer
+  /// instead of on every screen refresh (60–144 on laptops, 90–120 on many
+  /// phones and tablets), which halves or quarters the drawing work; a scroll
+  /// glide still runs per frame ([busy]). 1.4.6: phones and tablets too
+  /// (Apurba: "phone and tablet peh bhi laggy"). 0 = every frame.
+  // 2.0: 25 a second (smooth to the eye, a sixth less drawing than 30)
+  static int playingStepMs = 40;
   int _pollMs = 0;
 
   /// Call at the end of every tick (ticker or timer).
@@ -862,6 +865,7 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> with SingleTickerPr
   @override
   void didUpdateWidget(covariant SyncedLyricsView old) {
     super.didUpdateWidget(old);
+    _lineCache.clear();
     if (old.lyrics != widget.lyrics) {
       _init();
       active = -1;
@@ -983,6 +987,62 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> with SingleTickerPr
     );
   }
 
+  // 2.0: a line whose look didn't change keeps its widget, so a new sung line
+  // rebuilds only the few lines around it (lines far away look the same).
+  final Map<int, (Object, Widget)> _lineCache = {};
+
+  Widget _line(int i, List<LyricLine> lines, {required TextStyle style, required bool fill, required LyricsClock? rc, required bool columns}) {
+    final distance = active < 0 ? i + 1 : i - active;
+    final sel = LyricsPane.selection.value?.contains(i);
+    final blurOff = _userScrolling || !Services.i.settings.blurLyrics;
+    final look = (
+      lines[i].isBreak ? (i == active) : distance.clamp(-5, 6),
+      sel,
+      style,
+      fill,
+      rc,
+      columns,
+      blurOff,
+      _userScrolling,
+      lines[i],
+    );
+    final hit = _lineCache[i];
+    if (hit != null && hit.$1 == look) return hit.$2;
+    final w = KeyedSubtree(
+      key: keys[i],
+      child: lines[i].isBreak
+          ? _BreakDots(clock: clock, nowMs: nowMs, beforeIndex: i + 1, color: widget.color, visible: i == active)
+          : _LineView(
+              index: i,
+              line: lines[i],
+              distance: distance.clamp(-5, 6),
+              clock: clock,
+              nowMs: nowMs,
+              style: style,
+              romanClock: rc,
+              columns: columns,
+              fill: fill,
+              blurOff: blurOff,
+              scrolling: _userScrolling,
+              selected: sel,
+              onLongPress: () => _toggle(i, start: true),
+              onTap: () {
+                if (LyricsPane.selection.value != null) return _toggle(i);
+                final ms = lines[i].startMs;
+                if (widget.onSeek != null) {
+                  widget.onSeek!(ms);
+                } else {
+                  Services.i.player.seek(Duration(milliseconds: ms));
+                  if (!Services.i.player.playing) Services.i.player.play();
+                }
+                setState(() => _userScrolling = false);
+              },
+            ),
+    );
+    _lineCache[i] = (look, w);
+    return w;
+  }
+
   Widget _list(BuildContext context, List<LyricLine> lines, {required TextStyle style, required bool fill, required LyricsClock? rc, required bool columns}) {
     return NotificationListener<ScrollNotification>(
       onNotification: _onScroll,
@@ -1002,37 +1062,7 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> with SingleTickerPr
             children: [
               // instrumental intro dots
               _BreakDots(clock: clock, nowMs: nowMs, beforeIndex: 0, color: widget.color, visible: active < 0),
-              for (var i = 0; i < lines.length; i++)
-                KeyedSubtree(
-                  key: keys[i],
-                  child: lines[i].isBreak
-                      ? _BreakDots(clock: clock, nowMs: nowMs, beforeIndex: i + 1, color: widget.color, visible: i == active)
-                      : _LineView(
-                          index: i,
-                          line: lines[i],
-                          distance: active < 0 ? i + 1 : i - active,
-                          clock: clock,
-                          nowMs: nowMs,
-                          style: style,
-                          romanClock: rc,
-                          columns: columns,
-                          fill: fill,
-                          blurOff: _userScrolling || !Services.i.settings.blurLyrics,
-                          selected: LyricsPane.selection.value?.contains(i),
-                          onLongPress: () => _toggle(i, start: true),
-                          onTap: () {
-                            if (LyricsPane.selection.value != null) return _toggle(i);
-                            final ms = lines[i].startMs;
-                            if (widget.onSeek != null) {
-                              widget.onSeek!(ms);
-                            } else {
-                              Services.i.player.seek(Duration(milliseconds: ms));
-                              if (!Services.i.player.playing) Services.i.player.play();
-                            }
-                            setState(() => _userScrolling = false);
-                          },
-                        ),
-                ),
+              for (var i = 0; i < lines.length; i++) _line(i, lines, style: style, fill: fill, rc: rc, columns: columns),
             ],
           ),
         ),
@@ -1050,6 +1080,9 @@ class _LineView extends StatelessWidget {
   final TextStyle style;
   final bool fill;
   final bool blurOff;
+
+  /// The person is scrolling through the lyrics (every line half bright).
+  final bool scrolling;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final bool? selected; // null = not selecting
@@ -1071,42 +1104,59 @@ class _LineView extends StatelessWidget {
     required this.style,
     required this.fill,
     required this.blurOff,
+    this.scrolling = false,
     required this.onTap,
   });
 
-  @override
-  Widget build(BuildContext context) {
+  double get _opacity {
     final isActive = selected ?? distance == 0;
     final d = selected == null ? distance.abs() : (selected! ? 0 : 2);
-    final opacity = isActive ? 1.0 : (blurOff ? 0.55 : (distance < 0 ? 0.30 : math.max(0.22, 0.48 - d * 0.05)));
-    // 1.4.1 (reference): the next line stays sharp, lines further away blur more
+    return isActive ? 1.0 : (scrolling ? 0.55 : (distance < 0 ? 0.30 : math.max(0.22, 0.48 - d * 0.05)));
+  }
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(end: _opacity),
+    duration: const Duration(milliseconds: 450),
+    curve: Curves.easeOut,
+    builder: (context, a, _) => _content(context, a),
+  );
+
+  Widget _content(BuildContext context, double a) {
+    final isActive = selected ?? distance == 0;
+    final d = selected == null ? distance.abs() : (selected! ? 0 : 2);
+    final style = this.style.copyWith(color: this.style.color!.withValues(alpha: this.style.color!.a * a));
+    // 1.4.1 (reference): the next line stays sharp, lines further away blur
+    // more — 2.0: only with "Blur far lines" on (Settings → Lyrics)
     final blur = isActive || blurOff || d <= 1 ? 0.0 : math.min((d - 1) * 1.0, 3.0);
     // "line\ntranslation" (translate on): the translation sits under the line, smaller and grey.
     final nl = line.text.indexOf('\n');
     final mainText = nl < 0 ? line.text : line.text.substring(0, nl);
     final sub = nl < 0 ? null : line.text.substring(nl + 1);
-    // one line of words that fill as they are sung; Urdu reads from the right
+    // one line of words that fill as they are sung; Urdu reads from the right.
+    // 2.0: one render object per line ([FillText]); the clock only repaints it.
     Widget words(LyricsClock c, LyricLine l, String shown, TextStyle st, {TextAlign align = TextAlign.start}) {
       final rtl = isRtlText(shown);
       final dir = rtl ? TextDirection.rtl : TextDirection.ltr;
+      final ta = align == TextAlign.end ? TextAlign.right : TextAlign.left;
       if (isActive && fill) {
-        return ValueListenableBuilder<int>(
-          valueListenable: nowMs,
-          builder: (context, ms, _) {
-            final ws = l.words?.map((w) => w.text).toList() ?? splitWords(shown);
-            final fills = c.wordFill(index, ms + c.leadMs); // same lead as the line change (and the mini line)
-            final d = st.color!.withValues(alpha: 0.32);
-            return Wrap(
-              textDirection: dir,
-              alignment: align == TextAlign.end ? (rtl ? WrapAlignment.start : WrapAlignment.end) : (rtl ? WrapAlignment.end : WrapAlignment.start),
-              children: [for (var w = 0; w < ws.length; w++) _Word(ws[w], w < fills.length ? fills[w] : 0, st, d, rtl: rtl)],
-            );
-          },
+        final ws = l.words?.map((w) => w.text).toList() ?? splitWords(shown);
+        return FillText(
+          key: ValueKey('fill$index-${identical(c, clock) ? 'o' : 'r'}'),
+          text: shown,
+          words: ws,
+          style: st,
+          dim: st.color!.withValues(alpha: 0.32 * (st.color!.a)),
+          align: ta,
+          direction: dir,
+          clock: nowMs,
+          // same lead as the line change (and the mini line)
+          fills: (ms) => c.wordFill(index, ms + c.leadMs),
         );
       }
       return SizedBox(
         width: double.infinity,
-        child: Text(shown, style: st, textDirection: dir, textAlign: align == TextAlign.end ? TextAlign.right : TextAlign.left),
+        child: Text(shown, style: st, textDirection: dir, textAlign: ta),
       );
     }
 
@@ -1157,10 +1207,12 @@ class _LineView extends StatelessWidget {
         ],
       );
     }
-    // 1.4.5.2: each line is its own layer, so the line being sung (redrawn
-    // every frame) doesn't make the blurred / faded lines redraw with it.
-    return RepaintBoundary(
-      child: GestureDetector(
+    // 2.0: no transparency layer and no blur layer per line: the line's
+    // fade is in its text colour (animated only when the line changes), and
+    // far lines blur only when "Blur far lines" is on.
+    Widget body = text;
+    if (blur > 0) body = ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur, tileMode: TileMode.decal), child: body);
+    return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       onLongPress: onLongPress,
@@ -1169,62 +1221,12 @@ class _LineView extends StatelessWidget {
         decoration: selected == true
             ? BoxDecoration(color: Colors.white.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(12))
             : const BoxDecoration(),
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 450),
-          curve: Curves.easeOut,
-          opacity: opacity,
-          child: AnimatedScale(
-            scale: isActive ? 1.0 : 0.93,
-            alignment: Alignment.centerLeft,
-            duration: const Duration(milliseconds: 550),
-            curve: Curves.easeOutBack,
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(end: blur),
-              duration: const Duration(milliseconds: 450),
-              builder: (context, b, child) => b < 0.05
-                  ? child!
-                  : ImageFiltered(
-                      imageFilter: ImageFilter.blur(sigmaX: b, sigmaY: b, tileMode: TileMode.decal),
-                      child: child,
-                    ),
-              child: text,
-            ),
-          ),
-        ),
-      ),
-    ));
-  }
-}
-
-/// One word whose colour fills left→right with [fill] 0..1 and lifts slightly.
-class _Word extends StatelessWidget {
-  final String text;
-  final double fill;
-  final TextStyle style;
-  final Color dim;
-
-  /// Right-to-left script (Urdu): the colour fills from the right.
-  final bool rtl;
-  const _Word(this.text, this.fill, this.style, this.dim, {this.rtl = false});
-  @override
-  Widget build(BuildContext context) {
-    final lit = style.color!;
-    final f = fill.clamp(0.0, 1.0);
-    const soft = 0.18;
-    return Transform.translate(
-      offset: Offset(0, -2.5 * Curves.easeOut.transform(f)),
-      child: ShaderMask(
-        blendMode: BlendMode.srcIn,
-        shaderCallback: (r) => LinearGradient(
-          begin: rtl ? Alignment.centerRight : Alignment.centerLeft,
-          end: rtl ? Alignment.centerLeft : Alignment.centerRight,
-          colors: [lit, lit, dim, dim],
-          stops: [0, (f * (1 + soft) - soft).clamp(0.0, 1.0), (f * (1 + soft)).clamp(0.0, 1.0), 1],
-        ).createShader(r),
-        child: Text(
-          text,
-          textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
-          style: style.copyWith(shadows: f > 0 && f < 1 ? [Shadow(color: lit.withValues(alpha: 0.35), blurRadius: 12)] : null),
+        child: AnimatedScale(
+          scale: isActive ? 1.0 : 0.93,
+          alignment: Alignment.centerLeft,
+          duration: const Duration(milliseconds: 550),
+          curve: Curves.easeOutBack,
+          child: body,
         ),
       ),
     );

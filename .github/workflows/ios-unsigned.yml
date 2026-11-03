@@ -1,0 +1,70 @@
+# Byte — builds an UNSIGNED iPhone app (.ipa) on GitHub's free Mac runners.
+# Install it with AltStore / Sideloadly / TrollStore (they sign it with your Apple ID).
+name: iOS unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.8
+          cache: true
+
+      - name: Get packages
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Tests
+        run: flutter test
+
+      - name: Check the iOS project (background audio, URL scheme, app icons, Automix + DJ voice)
+        run: |
+          /usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes:0' ios/Runner/Info.plist | grep -qx audio
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' ios/Runner/Info.plist | grep -qx byte
+          grep -q 'ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES' ios/Runner.xcodeproj/project.pbxproj
+          grep -q 'ByteEQ.m in Sources' ios/Runner.xcodeproj/project.pbxproj
+          /usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsLocalNetworking' ios/Runner/Info.plist | grep -qx true
+          /usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' ios/Runner/Info.plist
+          grep -q 'class AutomixDecoder' ios/Runner/AppDelegate.swift
+          grep -q 'class ByteVoice' ios/Runner/AppDelegate.swift
+          grep -q 'byte/automix' ios/Runner/AppDelegate.swift
+          for n in Monochrome LiquidGlass LiquidGlassDark LiquidGlassClear LiquidGlassClearDark NeonSilver NeonCyan NeonViolet SoftGlass SoftGlassDark SoftNeonCyan RoundGlass RoundGlassDark RoundNeonCyan; do test -f "ios/Runner/Assets.xcassets/AppIcon-$n.appiconset/icon-1024.png"; done
+
+      - name: Build (no code signing)
+        run: |
+          flutter build ios --release --no-codesign --obfuscate --split-debug-info=build/symbols
+
+      - name: Check the app (alternate icons compiled in)
+        run: |
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundleAlternateIcons' build/ios/iphoneos/Runner.app/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundleAlternateIcons' build/ios/iphoneos/Runner.app/Info.plist | grep -q AppIcon-NeonViolet
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/ios/iphoneos/Runner.app/Info.plist | grep -qx 1.3.0
+          nm build/ios/iphoneos/Runner.app/Runner | grep -q ByteEQ && echo "equalizer compiled in"
+          nm build/ios/iphoneos/Runner.app/Runner | grep -q AutomixDecoder && echo "automix decoder compiled in"
+          nm build/ios/iphoneos/Runner.app/Runner | grep -q ByteVoice && echo "DJ voice compiled in"
+          (ls build/ios/iphoneos/Runner.app/Frameworks | grep -i video_player || nm build/ios/iphoneos/Runner.app/Runner | grep -qi FVPVideoPlayer) && echo "video mode player compiled in" || echo "note: video player linked another way"
+
+      - name: Package .ipa
+        run: |
+          mkdir -p build/ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ipa/Payload/
+          cd build/ipa && zip -qry ../../Byte-v1.3-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Byte-iOS-unsigned-ipa
+          path: Byte-v1.3-unsigned.ipa
+          retention-days: 30

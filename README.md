@@ -1,6 +1,6 @@
 # Byte
 
-Music app for Android (phone + tablet), iPhone, Windows, macOS and Linux, built with Flutter.
+Music app for Android (phone + tablet) and iPhone, built with Flutter.
 © 2026 Apurba Laskar. All rights reserved.
 
 - YouTube Music catalogue (home, search, charts, new releases, albums, artists, playlists)
@@ -24,13 +24,7 @@ Music app for Android (phone + tablet), iPhone, Windows, macOS and Linux, built 
     # Android release (needs your signing key — see android/key.properties.example)
     BYTE_KEY_PROPERTIES=/path/to/key.properties flutter build apk --release --split-per-abi \
         --target-platform android-arm,android-arm64 --obfuscate --split-debug-info=build/symbols
-    # Windows / macOS / Linux / iPhone (unsigned): GitHub Actions, .github/workflows/desktop.yml
-    # (every push to main; the files land on the GitHub Release)
-    flutter build linux --release   # needs clang cmake ninja-build pkg-config libgtk-3-dev libmpv-dev libsecret-1-dev
-
-Desktop notes: on Windows and Linux songs play through packages/byte_desktop_audio (Byte's own
-backend on media_kit / libmpv; Linux needs `sudo apt install libmpv2`). The window opens at
-1280×820 (minimum 900×600), so the wide layout is used.
+    # iPhone (unsigned): see .github/workflows/ios-unsigned.yml
 
 `flutter test test_shots/shots_test.dart` renders screenshots with live data (needs internet); `test_shots/v12_shots_test.dart` does the 1.2 screens and `test_shots/v121_shots_test.dart` the 1.2.1 look.
 `dart run tool/analyze_pcm.dart file.raw` (mono s16le 11025 Hz) prints Automix's analysis; `tool/render_mix.dart` renders a planned blend to WAV.

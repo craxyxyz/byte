@@ -1,4 +1,3 @@
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -69,12 +68,10 @@ Future<void> showAccountSwitcher(BuildContext context) {
     pageBuilder: (ctx, _, _) => const _Switcher(),
     transitionBuilder: (ctx, a, _, child) {
       final c = CurvedAnimation(parent: a, curve: Curves.easeOutCubic);
-      return BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 6 * a.value, sigmaY: 6 * a.value),
-        child: FadeTransition(
-          opacity: c,
-          child: ScaleTransition(scale: Tween(begin: 0.94, end: 1.0).animate(c), alignment: Alignment.topRight, child: child),
-        ),
+      // 2.0: no live blur of the whole screen behind the switcher
+      return FadeTransition(
+        opacity: c,
+        child: ScaleTransition(scale: Tween(begin: 0.94, end: 1.0).animate(c), alignment: Alignment.topRight, child: child),
       );
     },
   );

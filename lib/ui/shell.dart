@@ -463,8 +463,14 @@ class _TabRow extends StatelessWidget {
                           children: [
                             tabGlyph(i, ShellState.tabs[i].$2, size: 26, color: i == index ? p.accent : ReadableGlass.navSecondary(Theme.of(context).brightness == Brightness.dark)),
                             const SizedBox(height: 2),
+                            // 1.4.6: tab labels keep their size (like the
+                            // phone's own tab bars); at large text they
+                            // spilled out of the bar.
                             Text(
                               ShellState.tabs[i].$3,
+                              textScaler: TextScaler.noScaling,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: BT.tab.copyWith(color: i == index ? p.accent : ReadableGlass.navSecondary(Theme.of(context).brightness == Brightness.dark), fontWeight: i == index ? FontWeight.w700 : FontWeight.w500),
                             ),
                           ],

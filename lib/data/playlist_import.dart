@@ -381,6 +381,10 @@ List<List<String>> _csvRows(String text) {
 const _ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const _bot = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
 
+/// What an import says about a link from a site Byte can't read (1.4.6).
+const unsupportedLinkMessage =
+    'That\'s not a supported playlist link. Paste a playlist link from Spotify, Apple Music, YouTube Music, JioSaavn, Gaana, Amazon Music, SoundCloud or Deezer, or paste the songs as text.';
+
 class PlaylistReader {
   final Net net;
   final InnerTube yt;
@@ -751,7 +755,17 @@ class PlaylistReader {
 
   /// Any other site that describes its playlist with schema.org data.
   Future<ExtList> _web(String link, {MusicService service = MusicService.web}) async {
-    final r = await _get(link);
+    NetResponse r;
+    try {
+      r = await _get(link);
+    } on NetException catch (e) {
+      // 1.4.6: a page that refuses us (403, 404 …) is not a playlist we can
+      // read; say so instead of "the server answered 403". No answer at all
+      // (offline, timeout) still reads as a connection problem.
+      if (e.status != null && service == MusicService.web) throw const ImportProblem(unsupportedLinkMessage);
+      rethrow;
+    }
+    if (!r.ok && service == MusicService.web) throw const ImportProblem(unsupportedLinkMessage);
     final l = parseJsonLdList(r.text, service, 'web:$link');
     if (l == null) throw const ImportProblem('Couldn\'t find a song list on that page. Paste the songs as text, or import a CSV file.');
     return l;

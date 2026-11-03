@@ -87,6 +87,33 @@ class WebProxyNet extends Net {
   Uri playUrl(String videoId, {bool low = false, bool mp4 = false}) =>
       endpoint.replace(queryParameters: {...endpoint.queryParameters, 'play': videoId, if (low) 'q': 'low', if (mp4) 'f': 'mp4'});
 
+  /// What the web app says when the server can't fetch songs at all (1.4.6).
+  static const playBlockedMessage =
+      'Songs can\'t play in the browser right now: the music service is blocking Byte\'s web server. Use the Byte app on your phone or computer.';
+
+  /// After a song failed to load in the browser: asks the server why. Returns
+  /// [playBlockedMessage] when the server says the catalogue blocks it (every
+  /// song would fail the same way), else null.
+  ///
+  /// The server only gives up on the catalogue after ~25 s (measured on the
+  /// live function, 2026-11-03), so the question waits up to 45 s; with 15 s
+  /// it timed out, found nothing, and the song was retried instead.
+  Future<String?> playProblem(String videoId, {bool mp4 = false, Duration timeout = const Duration(seconds: 45)}) async {
+    try {
+      final res = await _c.get(playUrl(videoId, low: true, mp4: mp4), headers: const {'range': 'bytes=0-1'}).timeout(timeout);
+      if (res.statusCode == 200 || res.statusCode == 206) return null;
+      final b = res.body;
+      // the server's own word (1.4.6 function), or the old function's JSON
+      // parse error on the catalogue's "Sorry…" page
+      if (b.contains('"blocked"') || b.contains('bot check') || b.contains('stream_blocked') || b.contains("Unexpected token '<'")) {
+        return playBlockedMessage;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool>? _pinging;
 
   /// Asks the server whether it is switched on (sets [state]). Calls made

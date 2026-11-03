@@ -91,7 +91,7 @@ class _ArtBackgroundState extends State<ArtBackground> with SingleTickerProvider
                   ),
                 ),
         ),
-        if (it?.thumb != null && kIsWeb)
+        if (it?.thumb != null && kIsWeb && !BlurredCover.onWeb)
           Opacity(
             opacity: 0.32,
             child: ImageFiltered(
@@ -149,9 +149,16 @@ class ArtPaletteTween {
 /// as a 60 px blur of the full cover; costs one textured rectangle per frame.
 class BlurredCover extends StatefulWidget {
   final String? url;
-  const BlurredCover({super.key, required this.url});
+
+  /// How strong the blurred picture is drawn (0.32 behind the player).
+  final double opacity;
+  const BlurredCover({super.key, required this.url, this.opacity = 0.32});
 
   static const int texels = 64;
+
+  /// 2.0: the web app uses the pre-blurred picture too (it used a live 60 px
+  /// blur under a transparency layer on every frame).
+  static bool onWeb = true;
 
   /// Blur in texels of the small image (≈ a 60 px blur on a laptop window).
   static const double sigma = 3.2;
@@ -220,7 +227,7 @@ class _BlurredCoverState extends State<BlurredCover> {
     final img = _img;
     if (img == null) return const SizedBox.expand();
     return SizedBox.expand(
-      child: RawImage(image: img, fit: BoxFit.cover, filterQuality: FilterQuality.medium, color: const Color.fromRGBO(255, 255, 255, 0.32), colorBlendMode: BlendMode.modulate),
+      child: RawImage(image: img, fit: BoxFit.cover, filterQuality: FilterQuality.medium, color: Color.fromRGBO(255, 255, 255, widget.opacity), colorBlendMode: BlendMode.modulate),
     );
   }
 }

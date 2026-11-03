@@ -56,7 +56,7 @@ class MainActivity : AudioServiceActivity() {
     // Launcher aliases live under the code package (namespace), not the
     // installed application id, so name them in full.
     private val ALIAS_PREFIX = "com.apurbalaskar.byteapp.Logo"
-    private val icons = listOf("Default", "Monochrome", "LiquidGlass", "LiquidGlassDark", "LiquidGlassClear", "LiquidGlassClearDark", "NeonSilver", "NeonCyan", "NeonViolet", "SamsungGlass", "SamsungGlassDark", "SamsungNeonCyan", "PixelGlass", "PixelGlassDark", "PixelNeonCyan")
+    private val icons = listOf("Default", "Monochrome", "LiquidGlass", "LiquidGlassDark", "LiquidGlassClear", "LiquidGlassClearDark", "NeonSilver", "NeonCyan", "NeonViolet", "SoftGlass", "SoftGlassDark", "SoftNeonCyan", "RoundGlass", "RoundGlassDark", "RoundNeonCyan")
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         ByteCrashLog.install(this) // 1.4.5: Android crashes + why Android closed Byte → Report a problem

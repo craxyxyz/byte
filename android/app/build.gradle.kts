@@ -2,7 +2,7 @@ import java.util.Properties
 
 // ── Byte by Apurba Laskar ───────────────────────────────────────────────
 // The id Android installs the app under (one place).
-val byteApplicationId = "com.apurbalaskar.byte"
+val byteApplicationId = "com.apurbalaskar.byte2"
 
 // Release signing key: android/key.properties (NOT in the source zip — see
 // key.properties.example), or the file named by BYTE_KEY_PROPERTIES.
@@ -19,8 +19,8 @@ plugins {
 }
 
 android {
-    // "byte" is a Java keyword, so the code package is byteapp; the installed
-    // application id stays com.apurbalaskar.byte.
+    // "byte" is a Java keyword, so the code package is byteapp. Byte 2.0
+    // installs beside the old Byte: application id com.apurbalaskar.byte2.
     namespace = "com.apurbalaskar.byteapp"
     compileSdk = 37 // a plugin (permission_handler) needs 37; targetSdk stays Flutter's
     ndkVersion = flutter.ndkVersion

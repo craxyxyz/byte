@@ -974,7 +974,7 @@ class AppearanceScreen extends StatelessWidget {
           GroupCard(
             children: [
               _switchRow(Icons.lyrics_outlined, 'Synced lyrics', 'Lines light up in time with the song', st.syncedLyrics, (v) => st.syncedLyrics = v),
-              _switchRow(Icons.blur_on_rounded, 'Blur unfocused lyrics', 'Softens the lines that aren\'t being sung', st.blurLyrics, (v) => st.blurLyrics = v),
+              _switchRow(Icons.blur_on_rounded, 'Blur unfocused lyrics', 'Softens the lines that aren\'t being sung (uses more battery)', st.blurLyrics, (v) => st.blurLyrics = v),
               GroupRow(
                 key: const ValueKey('lyrics-script'),
                 icon: Icons.abc_rounded,
@@ -1212,6 +1212,14 @@ class PerformanceScreen extends StatelessWidget {
                 st.highPerformance = v;
                 await applyRefreshRate(v);
               },
+            ),
+            // 2.0: glass is drawn without a live blur unless this is on
+            _switchRow(
+              Icons.blur_on_rounded,
+              'Real glass blur',
+              'Bars blur what scrolls under them. Looks deeper but costs battery and can stutter on some phones. Off: the same frosted look, smoother',
+              st.realBlur,
+              (v) => st.realBlur = v,
             ),
             _switchRow(
               Icons.skip_next_rounded,

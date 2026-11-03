@@ -192,6 +192,11 @@ class Settings extends ChangeNotifier {
 
   set glassEffects(bool v) => _set('glass', v);
 
+  /// 2.0, Settings → Performance → Real glass blur: bars blur what scrolls
+  /// under them live (looks deeper, costs every frame). Off by default.
+  bool get realBlur => _get('realBlur', false);
+  set realBlur(bool v) => _set('realBlur', v);
+
   /// Fewer and shorter animations (Settings → Performance).
   bool get reduceMotion => _get('reduceMotion', false);
   set reduceMotion(bool v) => _set('reduceMotion', v);
@@ -237,8 +242,8 @@ class Settings extends ChangeNotifier {
   set syncedLyrics(bool v) => _set('syncedLyrics', v);
 
   /// Blur the lyric lines that aren't being sung.
-  bool get blurLyrics => _get('blurLyrics', true);
-  set blurLyrics(bool v) => _set('blurLyrics', v);
+  bool get blurLyrics => _get('blurLyrics2', false); // 2.0: off by default (a blur per line costs every frame)
+  set blurLyrics(bool v) => _set('blurLyrics2', v);
 
   // Performance
   bool get highPerformance => _get('highPerf', false);

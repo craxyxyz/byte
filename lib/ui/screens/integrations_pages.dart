@@ -613,7 +613,7 @@ class _SpotifyAccountScreenState extends State<SpotifyAccountScreen> {
                                 onTap: () async {
                                   final d = await Clipboard.getData(Clipboard.kTextPlain);
                                   final t = d?.text?.trim() ?? '';
-                                  if (t.isNotEmpty) setState(() => client.text = t);
+                                  if (t.isNotEmpty && mounted) setState(() => client.text = t);
                                 },
                               ),
                               _Input(client, 'Client ID', onChanged: (_) => setState(() {})),

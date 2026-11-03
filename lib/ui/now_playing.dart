@@ -5,6 +5,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:just_audio/just_audio.dart' show ProcessingState;
 
 import '../core/models.dart';
 import '../data/settings.dart' show Settings;
@@ -51,6 +52,15 @@ class NowPlayingScreen extends StatefulWidget {
   State<NowPlayingScreen> createState() => _NowPlayingScreenState();
 }
 
+/// 1.4.6: full-screen lyrics kick in only with a song loaded: playing, or
+/// paused by hand. Stopped, failed to load or nothing at all → they don't.
+bool lyricsMayGoFullScreen(ByteAudioHandler p) {
+  if (p.current.value == null) return false;
+  if (p.playing) return true;
+  final st = p.activePlayer.processingState;
+  return st == ProcessingState.ready || st == ProcessingState.buffering;
+}
+
 class _NowPlayingScreenState extends State<NowPlayingScreen> {
   late PlayerMode mode = PlayerMode.values[widget.initial.index];
   NpTab sideTab = NpTab.lyrics;
@@ -83,6 +93,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     if (!_lyricsOnScreen || !Services.i.settings.lyricsAutoFullScreen) return;
     _idleTimer = Timer(LyricsPane.idleAfter, () {
       if (!mounted || !_lyricsOnScreen || LyricsPane.selection.value != null) return;
+      // 1.4.6: nothing playing (no song, stopped, failed to load) → the
+      // lyrics don't take the screen by themselves; they do once it plays.
+      if (!lyricsMayGoFullScreen(Services.i.player)) {
+        _poke();
+        return;
+      }
       LyricsPane.idle.value = true;
     });
   }
@@ -1194,16 +1210,23 @@ class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, c) {
+        final scaler = MediaQuery.textScalerOf(context);
         final tp = TextPainter(
           text: TextSpan(text: widget.text, style: widget.style),
           maxLines: 1,
+          textScaler: scaler,
           textDirection: TextDirection.ltr,
         )..layout();
         final over = tp.width - c.maxWidth;
-        if (over <= 0) {
-          if (overflow != 0) _stop();
+        // 1.4.6: a title that doesn't fit shows "…" whenever it isn't moving
+        // (the pause at the start, reduced motion, a very short box), so it
+        // never looks cut off mid-word.
+        final still = Text(widget.text, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: widget.style);
+        if (over <= 0 || !c.maxWidth.isFinite || MediaQuery.disableAnimationsOf(context)) {
+          // 1.4.5.2: the waits are timers; stop them too
+          if (overflow != 0 || a.isAnimating) _stop();
           overflow = 0;
-          return Text(widget.text, maxLines: 1, style: widget.style);
+          return still;
         }
         if (over != overflow) {
           overflow = over;
@@ -1217,6 +1240,7 @@ class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
               builder: (context, _) {
                 // wait at the start, scroll, wait, jump back (see _hold)
                 final p = a.value;
+                if (p == 0) return Align(alignment: Alignment.centerLeft, child: still);
                 return Transform.translate(
                   offset: Offset(-p * (over + 8), 0),
                   child: OverflowBox(
@@ -1247,8 +1271,13 @@ class _SeekBarState extends State<SeekBar> {
   @override
   void initState() {
     super.initState();
+    // 1.4.6 (phone/tablet lag): checked 4×/s, but redrawn only when what it
+    // shows changed — a paused song's bar draws nothing.
     _t = Timer.periodic(const Duration(milliseconds: 250), (_) {
-      if (mounted && _drag == null) setState(() {});
+      if (!mounted || _drag != null) return;
+      final k = _shownKey();
+      if (k == _shown) return;
+      setState(() {});
     });
   }
 
@@ -1258,11 +1287,23 @@ class _SeekBarState extends State<SeekBar> {
     super.dispose();
   }
 
+  String? _shown;
+  String _shownKey() {
+    try {
+      final p = Services.i.player;
+      return '${p.clock.nowMs ~/ 100}|${p.duration?.inMilliseconds}|${p.activePlayer.bufferedPosition.inMilliseconds ~/ 500}|${p.current.value?.id}';
+    } catch (_) {
+      return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    _shown = _shownKey();
     final p = Services.i.player;
     final dur = (p.duration?.inMilliseconds ?? 0).toDouble();
-    final pos = _drag ?? p.clock.nowMs.toDouble().clamp(0.0, dur <= 0 ? 0.0 : dur);
+    // 1.4.6: a drag that outlives its song (the next one is shorter) is kept inside the new length
+    final pos = (_drag ?? p.clock.nowMs.toDouble()).clamp(0.0, dur <= 0 ? 0.0 : dur);
     final buffered = p.activePlayer.bufferedPosition.inMilliseconds.toDouble().clamp(0.0, dur <= 0 ? 0.0 : dur);
     final small = Theme.of(context).textTheme.bodySmall!.copyWith(color: Colors.white70, fontFeatures: const [FontFeature.tabularFigures()]);
     // 1.4.5.2: redrawn 4×/s on its own layer, not with the whole player

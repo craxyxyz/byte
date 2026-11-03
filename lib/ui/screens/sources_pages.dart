@@ -204,6 +204,7 @@ class _SmbScreenState extends State<SmbScreen> {
     try {
       final shares = await smb.connect(host.text.trim(), user.text.trim(), pass.text, domain: domain.text.trim());
       pass.clear();
+      if (!mounted) return;
       setState(() {
         path = '';
         entries = shares;
@@ -223,6 +224,7 @@ class _SmbScreenState extends State<SmbScreen> {
     });
     try {
       final e = p.isEmpty ? await smb.shares() : await smb.list(p);
+      if (!mounted) return;
       setState(() {
         path = p;
         entries = e;
@@ -290,7 +292,7 @@ class _SmbScreenState extends State<SmbScreen> {
                     titleColor: const Color(0xFFFF3B30),
                     onTap: () async {
                       await smb.forget();
-                      setState(() => entries = null);
+                      if (mounted) setState(() => entries = null);
                     },
                   ),
                 ],

@@ -21,6 +21,7 @@ import 'screens/playlist_screen.dart';
 import 'service_rows.dart' show LikedArt;
 import 'shell.dart';
 import 'style.dart';
+import 'widgets.dart' show textGrow;
 
 /// Playlists made in Byte (not brought in from another app), local or synced
 /// from the Byte account: pinned first, then most recently played or edited.
@@ -72,7 +73,8 @@ class HomeLibraryRows extends StatelessWidget {
               onAction: () => ShellState.current?.select(2),
             ),
             SizedBox(
-              height: 206,
+              // 1.4.6: taller with large text (the names were cut at 1.3×)
+              height: 206 + textGrow(context, 44),
               child: ListView(
                 key: const ValueKey('home-your-playlists-list'),
                 scrollDirection: Axis.horizontal,
@@ -123,7 +125,7 @@ class _LikedCard extends StatelessWidget {
                 pushPage(context, const LikedScreen());
               },
               child: Container(
-                height: 76,
+                constraints: const BoxConstraints(minHeight: 76), // 1.4.6: grows with large text
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(color: p.grouped, borderRadius: BorderRadius.circular(14)),
                 child: Row(

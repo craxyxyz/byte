@@ -34,7 +34,7 @@ class Scrobbler extends ChangeNotifier {
   static const lbApi = 'https://api.listenbrainz.org';
   static const lfmApi = 'https://ws.audioscrobbler.com/2.0/';
   static const client = 'Byte';
-  static const version = '1.4.5';
+  static const version = '1.4.6';
 
   Future<void> open() async => _b = await Hive.openBox('scrobble_private');
   T _get<T>(String k, T def) {

@@ -110,37 +110,37 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
-        <activity-alias android:name=".LogoSamsungGlass" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_samsung_glass" android:roundIcon="@mipmap/ic_launcher_samsung_glass">
+        <activity-alias android:name=".LogoSoftGlass" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_soft_glass" android:roundIcon="@mipmap/ic_launcher_soft_glass">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
-        <activity-alias android:name=".LogoSamsungGlassDark" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_samsung_glass_dark" android:roundIcon="@mipmap/ic_launcher_samsung_glass_dark">
+        <activity-alias android:name=".LogoSoftGlassDark" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_soft_glass_dark" android:roundIcon="@mipmap/ic_launcher_soft_glass_dark">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
-        <activity-alias android:name=".LogoSamsungNeonCyan" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_samsung_neon_cyan" android:roundIcon="@mipmap/ic_launcher_samsung_neon_cyan">
+        <activity-alias android:name=".LogoSoftNeonCyan" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_soft_neon_cyan" android:roundIcon="@mipmap/ic_launcher_soft_neon_cyan">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
-        <activity-alias android:name=".LogoPixelGlass" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_pixel_glass" android:roundIcon="@mipmap/ic_launcher_pixel_glass">
+        <activity-alias android:name=".LogoRoundGlass" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_round_glass" android:roundIcon="@mipmap/ic_launcher_round_glass">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
-        <activity-alias android:name=".LogoPixelGlassDark" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_pixel_glass_dark" android:roundIcon="@mipmap/ic_launcher_pixel_glass_dark">
+        <activity-alias android:name=".LogoRoundGlassDark" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_round_glass_dark" android:roundIcon="@mipmap/ic_launcher_round_glass_dark">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
-        <activity-alias android:name=".LogoPixelNeonCyan" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_pixel_neon_cyan" android:roundIcon="@mipmap/ic_launcher_pixel_neon_cyan">
+        <activity-alias android:name=".LogoRoundNeonCyan" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_round_neon_cyan" android:roundIcon="@mipmap/ic_launcher_round_neon_cyan">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -152,7 +152,7 @@
             android:name=".LockScreenActivity"
             android:exported="false"
             android:launchMode="singleInstance"
-            android:taskAffinity="com.apurbalaskar.byte.lockscreen"
+            android:taskAffinity="com.apurbalaskar.byte2.lockscreen"
             android:excludeFromRecents="true"
             android:showWhenLocked="true"
             android:theme="@android:style/Theme.Black.NoTitleBar"

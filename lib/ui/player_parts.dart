@@ -20,6 +20,7 @@ import '../player/audio_route.dart';
 import '../player/byte_handler.dart';
 import '../player/queue.dart' as q;
 import '../services.dart';
+import 'kit/line_fill.dart';
 import 'glyphs.dart';
 import 'now_playing.dart' show showSleepSheet, showSpeedSheet;
 import 'widgets.dart';
@@ -660,10 +661,8 @@ class _NextLyricLineState extends State<NextLyricLine> with SingleTickerProvider
                   Flexible(
                     child: _loading || c == null || idx < 0
                         ? Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: style.copyWith(color: Colors.white.withValues(alpha: 0.5)))
-                        : ValueListenableBuilder<int>(
-                            valueListenable: _ms,
-                            builder: (context, ms, _) => MiniLyricFill(text: text, fill: miniLineFill(c, idx, ms), style: style),
-                          ),
+                        // 2.0: laid out once; the clock only repaints it
+                        : LineFill(key: const ValueKey('mini-lyric-fill'), text: text, style: style, clock: _ms, fraction: (ms) => miniLineFill(c, idx, ms)),
                   ),
                   if (!_loading) Padding(padding: const EdgeInsets.only(left: 2), child: Icon(Icons.chevron_right_rounded, size: 18, color: Colors.white.withValues(alpha: 0.6))),
                 ],

@@ -22,6 +22,12 @@ class WebProxy {
     final apple = defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS;
     return net.playUrl(videoId, low: low, mp4: apple);
   }
+
+  /// Why [videoId] didn't play in the browser, when it's the server's block (1.4.6).
+  static Future<String?> playProblem(String videoId) {
+    final apple = defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS;
+    return net.playProblem(videoId, mp4: apple);
+  }
 }
 
 /// Wraps the app on the web: one honest line while the web server is off.
@@ -57,7 +63,7 @@ class _WebShellState extends State<WebShell> {
 class WebServerBanner extends StatelessWidget {
   final VoidCallback onClose;
   const WebServerBanner({super.key, required this.onClose});
-  static const text = 'Online songs need the Byte web server switched on — 1 step for the owner. Your library and settings work.';
+  static const text = 'Online search can\'t be reached right now. Your library and settings still work.';
   @override
   Widget build(BuildContext context) {
     final top = MediaQueryData.fromView(View.of(context)).padding.top;

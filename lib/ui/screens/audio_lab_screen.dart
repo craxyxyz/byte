@@ -14,6 +14,7 @@ import '../widgets.dart';
 import '../../player/equalizer.dart' show ByteEqualizer;
 import 'settings_pages.dart' show QualityScreen, EqualizerScreen;
 import 'settings_screen.dart' show qualityLabel;
+import 'headphone_screen.dart';
 
 // Byte © 2026 Apurba Laskar. Settings → Audio Lab.
 
@@ -154,6 +155,8 @@ class AudioLabScreen extends StatelessWidget {
         ];
         final cards = [
           _LabCard(const ValueKey('lab-eq'), Icons.equalizer_rounded, 'Equalizer', !_caps.eq ? _caps.note : (lab.eqOn ? 'On · ${lab.preset ?? 'Custom'}' : 'Off'), () => pushPage(context, const LabEqualizerScreen())),
+          // 2.0: headphone correction under your own curve
+          _LabCard(const ValueKey('lab-headphones'), Icons.headphones_rounded, 'Headphones', !_caps.eq ? _caps.note : (lab.hpOn && lab.hpName != null ? 'On · ${lab.hpName}' : 'Correct your headphones'), () => pushPage(context, const LabHeadphoneScreen())),
           _LabCard(const ValueKey('lab-fx'), Icons.auto_awesome_rounded, 'Audio effects', fx.isEmpty ? 'None on' : fx.join(' · '), () => pushPage(context, const LabEffectsScreen())),
           _LabCard(const ValueKey('lab-quality'), Icons.high_quality_rounded, 'Audio quality', 'Wi-Fi ${qualityLabel(st.wifiQuality)}', () => pushPage(context, const LabQualityScreen())),
           _LabCard(const ValueKey('lab-transition'), Icons.swap_horiz_rounded, 'Transition', _transitionLabel(), () => pushPage(context, const LabTransitionScreen())),
@@ -163,6 +166,11 @@ class AudioLabScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text('Shape how every song sounds. Everything here works on the music as it plays.', style: BT.sub.copyWith(color: BytePalette.of(context).secondary)),
+          ),
+          // 2.0: the curve that plays right now (headphone correction + your EQ)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: RepaintBoundary(child: ResponseGraph(key: const ValueKey('lab-graph'), lab: lab, height: 130)),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),

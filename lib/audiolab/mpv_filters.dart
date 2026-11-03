@@ -20,8 +20,8 @@ String mpvFilterGraph(AudioLab lab) {
   final f = <String>[];
   final gain = (c['inputGain'] as num).toDouble();
   if (gain.abs() > 0.01) f.add('volume=${_n(gain)}dB');
-  if (lab.eqOn) {
-    for (final n in lab.nodes) {
+  if (lab.anyEq) {
+    for (final n in lab.activeNodes) {
       if (n.g.abs() < 0.05) continue;
       final kind = switch (n.type) {
         EqNodeType.lowShelf => 'lowshelf',

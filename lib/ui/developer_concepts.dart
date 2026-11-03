@@ -833,10 +833,24 @@ class _ConceptCState extends State<DeveloperConceptC> with TickerProviderStateMi
     }
   }
 
+  // 2.0: the pulse beats only while a song plays, 30 times a second on a
+  // timer (not every screen refresh); paused, it rests and nothing draws.
+  Timer? _beatTimer;
+
   void _restartBeat() {
-    if (!mounted || _stillOf(context)) return;
-    _beat.duration = _playing ? _playingBeat : _idleBeat;
-    _beat.repeat();
+    if (!mounted) return;
+    _beatTimer?.cancel();
+    _beatTimer = null;
+    if (_stillOf(context) || !_playing) {
+      _beat.value = 0.35;
+      return;
+    }
+    final start = DateTime.now().millisecondsSinceEpoch;
+    final ms = _playingBeat.inMilliseconds;
+    _beatTimer = Timer.periodic(const Duration(milliseconds: 40), (_) {
+      if (!mounted) return;
+      _beat.value = ((DateTime.now().millisecondsSinceEpoch - start) % ms) / ms;
+    });
   }
 
   @override
@@ -851,13 +865,13 @@ class _ConceptCState extends State<DeveloperConceptC> with TickerProviderStateMi
       _beat.value = 0.35;
     } else {
       if (_enter.value < 1) _enter.forward();
-      _beat.duration = _playing ? _playingBeat : _idleBeat;
-      _beat.repeat();
+      _restartBeat();
     }
   }
 
   @override
   void dispose() {
+    _beatTimer?.cancel();
     _sub?.cancel();
     _enter.dispose();
     _beat.dispose();

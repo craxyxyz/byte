@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'models.dart';
 import 'net.dart';
 import 'innertube_parse.dart';
+import 'search_rank.dart';
 
 /// Search filters as YouTube Music encodes them.
 const searchParams = {
@@ -183,7 +184,7 @@ class InnerTube {
 
   Future<List<Item>> search(String query, SearchFilter filter) async {
     if (filter == SearchFilter.all) {
-      return parseSearchItems(await call('search', {'query': query}));
+      return rankSearchItems(query, parseSearchItems(await call('search', {'query': query})));
     }
     final j = await call('search', {'query': query, 'params': Uri.decodeComponent(searchParams[filter]!)});
     var items = parseSearchItems(j);
@@ -202,7 +203,7 @@ class InnerTube {
       SearchFilter.episodes => {ItemKind.episode},
       SearchFilter.all => ItemKind.values.toSet(),
     };
-    return items.where((i) => want.contains(i.kind)).toList();
+    return rankSearchItems(query, items.where((i) => want.contains(i.kind)).toList());
   }
 
   /// Search returning the "all" shelves (Top result, Songs, Albums …).
@@ -212,7 +213,7 @@ class InnerTube {
     // Newer layouts return one flat mixed list instead of titled shelves.
     final inShelves = shelves.expand((s) => s.items).map((i) => '${i.kind.name}:${i.id}').toSet();
     final rest = parseSearchItems(j).where((i) => !inShelves.contains('${i.kind.name}:${i.id}')).toList();
-    return [...shelves, if (rest.isNotEmpty) Shelf('Results', rest)];
+    return rankSearchShelves(query, [...shelves, if (rest.isNotEmpty) Shelf('Results', rest)]);
   }
 
   Future<List<String>> suggestions(String query) async {

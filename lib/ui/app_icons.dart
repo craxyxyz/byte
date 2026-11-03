@@ -26,12 +26,12 @@ class AppIcons {
     AppIconOption('neon-silver', 'Neon Silver', 'NeonSilver'),
     AppIconOption('neon-cyan', 'Neon Cyan', 'NeonCyan'),
     AppIconOption('neon-violet', 'Neon Violet', 'NeonViolet'),
-    AppIconOption('samsung-glass', 'Samsung Glass', 'SamsungGlass', IconShape.squircle),
-    AppIconOption('samsung-glass-dark', 'Samsung Glass Dark', 'SamsungGlassDark', IconShape.squircle),
-    AppIconOption('samsung-neon-cyan', 'Samsung Neon Cyan', 'SamsungNeonCyan', IconShape.squircle),
-    AppIconOption('pixel-glass', 'Pixel Glass', 'PixelGlass', IconShape.circle),
-    AppIconOption('pixel-glass-dark', 'Pixel Glass Dark', 'PixelGlassDark', IconShape.circle),
-    AppIconOption('pixel-neon-cyan', 'Pixel Neon Cyan', 'PixelNeonCyan', IconShape.circle),
+    AppIconOption('soft-glass', 'Soft Glass', 'SoftGlass', IconShape.squircle),
+    AppIconOption('soft-glass-dark', 'Soft Glass Dark', 'SoftGlassDark', IconShape.squircle),
+    AppIconOption('soft-neon-cyan', 'Soft Neon Cyan', 'SoftNeonCyan', IconShape.squircle),
+    AppIconOption('round-glass', 'Round Glass', 'RoundGlass', IconShape.circle),
+    AppIconOption('round-glass-dark', 'Round Glass Dark', 'RoundGlassDark', IconShape.circle),
+    AppIconOption('round-neon-cyan', 'Round Neon Cyan', 'RoundNeonCyan', IconShape.circle),
   ];
 
   /// The rows of the picker, laid out like the icon sheet.
@@ -39,8 +39,8 @@ class AppIcons {
     ('Classic', ['default', 'monochrome']),
     ('Liquid Glass', ['liquid-glass', 'liquid-glass-dark', 'liquid-glass-clear', 'liquid-glass-clear-dark']),
     ('Neon', ['neon-silver', 'neon-cyan', 'neon-violet']),
-    ('Samsung', ['samsung-glass', 'samsung-glass-dark', 'samsung-neon-cyan']),
-    ('Pixel', ['pixel-glass', 'pixel-glass-dark', 'pixel-neon-cyan']),
+    ('Soft', ['soft-glass', 'soft-glass-dark', 'soft-neon-cyan']),
+    ('Round', ['round-glass', 'round-glass-dark', 'round-neon-cyan']),
   ];
 
   static AppIconOption byId(String id) => all.firstWhere((e) => e.id == id, orElse: () => all.first);

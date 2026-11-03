@@ -13,6 +13,7 @@ import '../services.dart';
 import 'nav.dart';
 import 'style.dart';
 import 'glass.dart';
+import 'kit/current_is.dart';
 
 /// How web images are loaded (swappable so screenshot tests can serve them).
 ImageProvider Function(String url) networkImage = (u) => CoverCache.dir != null ? CachedCover(u) : NetworkImage(u);
@@ -48,11 +49,15 @@ class Artwork extends StatelessWidget {
       ),
       child: Icon(icon, size: size * 0.42, color: cs.onPrimaryContainer.withValues(alpha: 0.7)),
     );
-    final provider = imageProviderFor(resolved);
+    // 2.0: decoded at the size it is drawn (a 1080 px cover for a 52 px row
+    // was decoded whole before: memory and decode time while scrolling)
+    final decodePx = (size * dpr * (isLetterboxedThumb(resolved) ? 4 / 3 : 1)).round();
+    ImageProvider? sized(ImageProvider? p) => p == null ? null : ResizeImage.resizeIfNeeded(decodePx, null, p);
+    final provider = sized(imageProviderFor(resolved));
     // While the big picture loads, show the small one the lists and the mini
     // player already loaded (no music-note flash when the player opens).
     final small = resizeThumb(url, 226);
-    final smallProvider = small != null && small != resolved ? imageProviderFor(small) : null;
+    final smallProvider = small != null && small != resolved ? sized(imageProviderFor(small)) : null;
     final Widget waiting = smallProvider == null
         ? placeholder
         : Image(
@@ -70,7 +75,7 @@ class Artwork extends StatelessWidget {
     final Widget onError = fallbackUrl != null && fallbackUrl != resolved
         ? _unbar(
             Image(
-              image: imageProviderFor(fallbackUrl)!,
+              image: sized(imageProviderFor(fallbackUrl))!,
               width: size,
               height: size,
               fit: fit,
@@ -139,10 +144,11 @@ class SongTile extends StatelessWidget {
     final p = BytePalette.of(context);
     final player = Services.i.player;
     final artSize = dense ? 50.0 : 54.0;
-    return ValueListenableBuilder<Item?>(
-      valueListenable: player.current,
-      builder: (context, cur, _) {
-        final isCur = cur?.id == item.id;
+    // 2.0: a row rebuilds only when it starts or stops being the song
+    // playing (every visible row rebuilt on every song change before)
+    return CurrentIs(
+      id: item.id,
+      builder: (context, isCur) {
         final leading = index != null && !showArt
             ? SizedBox(
                 width: 32,
@@ -395,6 +401,11 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
+/// Extra height a fixed-height row or shelf needs at the phone's text size:
+/// [perUnit] × (scale − 1), so 0 at normal size (1.4.6).
+double textGrow(BuildContext context, double perUnit) =>
+    (MediaQuery.textScalerOf(context).scale(10) / 10 - 1).clamp(0.0, 1.0) * perUnit;
+
 void toast(BuildContext context, String msg) {
   final m = ScaffoldMessenger.maybeOf(context);
   m?.hideCurrentSnackBar();
@@ -566,23 +577,48 @@ Future<void> addToPlaylistSheet(BuildContext context, List<Item> items) async {
 
 Future<String?> promptText(BuildContext context, {required String title, String? hint, String? initial, String action = 'Save'}) async {
   final c = TextEditingController(text: initial);
+  // 1.4.6: Save with an empty name used to close nothing and say nothing;
+  // the dialog now stays open and says what's missing.
+  String? problem;
   return showDialog<String>(
     context: context,
-    builder: (ctx) => GlassDialog(
-      title: Text(title),
-      content: TextField(
-        controller: c,
-        autofocus: true,
-        textCapitalization: TextCapitalization.sentences,
-        decoration: InputDecoration(hintText: hint),
-        onSubmitted: (v) => Navigator.pop(ctx, v.trim().isEmpty ? null : v.trim()),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim().isEmpty ? null : c.text.trim()), child: Text(action)),
-      ],
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setD) {
+        void done() {
+          final v = c.text.trim();
+          if (v.isEmpty) {
+            setD(() => problem = emptyNameMessage(hint));
+            return;
+          }
+          Navigator.pop(ctx, v);
+        }
+
+        return GlassDialog(
+          title: Text(title),
+          content: TextField(
+            controller: c,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(hintText: hint, errorText: problem),
+            onChanged: (_) {
+              if (problem != null) setD(() => problem = null);
+            },
+            onSubmitted: (_) => done(),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(onPressed: done, child: Text(action)),
+          ],
+        );
+      },
     ),
   );
+}
+
+/// "Type a playlist name first" (from the field's hint, "Playlist name").
+String emptyNameMessage(String? hint) {
+  final h = (hint ?? '').trim();
+  return h.isEmpty ? 'Type a name first' : 'Type a ${h[0].toLowerCase()}${h.substring(1)} first';
 }
 
 /// Loading skeleton: rows shaped like the songs that are coming (cover,

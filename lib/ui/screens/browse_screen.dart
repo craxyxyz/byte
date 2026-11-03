@@ -1,4 +1,4 @@
-import 'dart:ui';
+import '../art_background.dart' show BlurredCover;
 
 import 'package:flutter/material.dart';
 import '../style.dart' show bottomBarSpace, Skel;
@@ -77,10 +77,9 @@ class _BrowseScreenState extends State<BrowseScreen> {
                 fit: StackFit.expand,
                 children: [
                   if (art != null)
-                    ImageFiltered(
-                      imageFilter: ImageFilter.blur(sigmaX: isArtist ? 0 : 40, sigmaY: isArtist ? 0 : 40),
-                      child: Artwork(art, size: width, radius: 0),
-                    ),
+                    // 2.0: an album header is blurred once (a small pre-blurred
+                    // picture), not live on every scroll frame
+                    isArtist ? Artwork(art, size: width, radius: 0) : BlurredCover(url: art, opacity: 1),
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(

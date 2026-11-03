@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
-import 'package:byte_desktop_audio/byte_desktop_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
@@ -14,8 +12,6 @@ import 'ui/screens/settings_pages.dart' show applyRefreshRate;
 import 'package:path_provider/path_provider.dart';
 import 'core/cover_cache.dart';
 import 'core/crash_log.dart';
-import 'core/frame_log.dart';
-import 'core/desktop_perftest.dart';
 import 'brand.dart';
 import 'core/innertube.dart';
 import 'core/net.dart';
@@ -36,7 +32,6 @@ import 'player/equalizer.dart';
 import 'services.dart';
 import 'player/audio_route.dart' show AudioRoute;
 import 'audiolab/audio_lab.dart';
-import 'audiolab/desktop_sound_backend.dart';
 import 'player/crossfade.dart' show CrossfadePlan;
 import 'data/spotify_account.dart';
 import 'ui/web_logins.dart';
@@ -47,8 +42,7 @@ import 'ui/glass.dart';
 import 'player/home_widget_sync.dart';
 import 'web/no_webview.dart';
 import 'web/web_proxy.dart';
-import 'ui/app_fullscreen.dart' show AppFullscreen;
-import 'package:window_manager/window_manager.dart';
+import 'web/embed_output.dart';
 import 'ui/smooth_wheel.dart';
 
 class HiveLyricsCache implements LyricsCache {
@@ -67,23 +61,13 @@ class HiveLyricsCache implements LyricsCache {
 @pragma('vm:entry-point')
 void lockScreenMain() => runLockScreenApp();
 
-/// Windows and Linux: no system media session (lock screen / media keys panel).
-bool get desktopNoMediaSession => !kIsWeb && (Platform.isWindows || Platform.isLinux);
-
 /// 1.4.3: keeps the party's app-resume hook alive.
 AppLifecycleListener? partyLifecycle;
 
 Future<void> main() async {
   // 1.4.5.2: the normal binding + smooth mouse-wheel scrolling on computers.
   ByteBinding.ensureInitialized();
-  // Windows/Linux: songs play through Byte's desktop audio backend.
-  ByteDesktopAudio.register();
-  // 1.4.5: and the Audio Lab through the computer player's filters.
-  DesktopSoundBackend.register();
   if (kReleaseMode) debugPrint = (String? message, {int? wrapWidth}) {};
-  // 1.4.5.1: BYTE_FRAME_LOG=1 prints frames per second and their build /
-  // raster time (desktop smoothness checks).
-  if (!kIsWeb && Platform.environment['BYTE_FRAME_LOG'] == '1') FrameLog.start();
   // 1.4.5: uncaught errors go to a small log on the phone (About → Report a problem).
   String? logDir;
   if (!kIsWeb) {
@@ -97,20 +81,7 @@ Future<void> main() async {
 
   // liquid glass goes lighter by itself on low-memory phones
   unawaited(GlassPerf.init());
-  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-    // Computers: keep Byte's data in its own app-data folder, not in Documents.
-    Hive.init('${(await getApplicationSupportDirectory()).path}${Platform.pathSeparator}byte');
-    // 1.4.5: full-screen lyrics put the window in real full screen (title bar
-    // and taskbar / dock / menu bar covered); leaving restores the window.
-    try {
-      await windowManager.ensureInitialized();
-      AppFullscreen.desktopHook = (on) => windowManager.setFullScreen(on);
-    } catch (_) {
-      // No window plugin: full-screen lyrics stay inside the window.
-    }
-  } else {
-    await Hive.initFlutter('byte');
-  }
+  await Hive.initFlutter('byte');
   final settings = Settings();
   await settings.open();
   final library = Library();
@@ -119,21 +90,23 @@ Future<void> main() async {
 
   // Web: every catalogue/lyrics call goes through the Byte web server (CORS).
   final Net net = kIsWeb ? WebProxy.net : HttpNet();
-  // Windows/Linux: no in-app browser for the sign-in pages (macOS has one).
-  if (desktopNoMediaSession) NoWebViewPlatform.install();
   if (kIsWeb) {
     NoWebViewPlatform.install(); // sign-in pages need the app; say so instead of crashing
     unawaited(WebProxy.net.ping());
     ByteAudioHandler.webPlayUrl = (id, q) => WebProxy.playUrl(id, low: q == AudioQuality.low);
+    ByteAudioHandler.webPlayProblem = WebProxy.playProblem;
   }
   final yt = InnerTube(net, gl: settings.contentRegion, hl: settings.language);
   final resolver = StreamResolver(yt);
   final equalizer = ByteEqualizer(settings);
   final automix = AutomixService(resolver: resolver, library: library, settings: settings);
   await automix.open();
-  ByteAudioHandler makeHandler() => ByteAudioHandler(resolver: resolver, yt: yt, library: library, settings: settings, equalizer: equalizer, automix: automix);
-  // Windows/Linux have no system media session for audio_service: the player runs on its own there.
-  final handler = desktopNoMediaSession ? makeHandler() : await AudioService.init(builder: makeHandler, config: byteAudioConfig);
+  final handler = await AudioService.init(
+    builder: () => ByteAudioHandler(resolver: resolver, yt: yt, library: library, settings: settings, equalizer: equalizer, automix: automix),
+    config: byteAudioConfig,
+  );
+  // 2.0 web: the official embedded player makes the sound (visible, small)
+  if (kIsWeb && EmbedBridge().available()) handler.remote = WebEmbedOutput(handler);
   try {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
@@ -181,7 +154,7 @@ Future<void> main() async {
   SpotifyAccount.webRefresher = refreshSpotifyQuietly;
   await Services.i.wireSources();
   // A fresh install starts with the welcome (an update never does).
-  ByteApp.welcome = !kIsWeb && !settings.onboarded && Services.i.library.likes.isEmpty && Services.i.library.history.isEmpty && Platform.environment['BYTE_PERFTEST'] != '1';
+  ByteApp.welcome = !kIsWeb && !settings.onboarded && Services.i.library.likes.isEmpty && Services.i.library.history.isEmpty;
   if (!ByteApp.welcome) settings.onboarded = true;
   // Storage → Song cache limit.
   Services.i.automix?.maxBytes = settings.songCacheMb * 1048576;
@@ -196,8 +169,6 @@ Future<void> main() async {
   labEngine.watch([for (final p in handler.decks) p.androidAudioSessionIdStream]);
   IosSoundBackend.restoreClassic = () => unawaited(equalizer.apply());
   unawaited(labEngine.start());
-  // 1.4.5.2: desktop smoothness check (CI only, BYTE_PERFTEST=1)
-  if (!kIsWeb && Platform.environment['BYTE_PERFTEST'] == '1') unawaited(DesktopPerfTest.run());
   handler.pauseFadeMs = () => Services.i.lab.fadeOnPause ? Services.i.lab.fadeMs : 0;
   handler.keepTogether = (a, b) => Services.i.lab.keepTogether(a.albumId ?? a.album, b.albumId ?? b.album);
   void applyPitch() => unawaited(handler.setPitch(Services.i.lab.pitchFor(settings.speed)));
@@ -205,14 +176,17 @@ Future<void> main() async {
   settings.addListener(applyPitch);
   applyPitch();
   // One equalizer at a time: the Audio Lab one turns the classic one off and back.
-  var labEqWas = Services.i.lab.eqOn;
+  var labEqWas = Services.i.lab.anyEq;
   Services.i.lab.addListener(() {
-    final on = Services.i.lab.eqOn;
+    final on = Services.i.lab.anyEq;
     if (on && !labEqWas && settings.eqEnabled) settings.eqEnabled = false;
     labEqWas = on;
   });
   settings.addListener(() {
-    if (settings.eqEnabled && Services.i.lab.eqOn) Services.i.lab.eqOn = false;
+    if (settings.eqEnabled && Services.i.lab.anyEq) {
+      Services.i.lab.eqOn = false;
+      Services.i.lab.hpOn = false;
+    }
   });
   void applyCurve() => CrossfadePlan.linear = Services.i.lab.fadeCurve == FadeCurve.linear;
   Services.i.lab.addListener(applyCurve);

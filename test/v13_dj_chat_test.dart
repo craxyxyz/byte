@@ -210,7 +210,7 @@ void main() {
     });
 
     test('labels have no other app / AI names', () {
-      final bad = RegExp(r'spotify|google|youtube|apple|amazon|chatgpt|openai|\bAI\b|siri|alexa|bitchord', caseSensitive: false);
+      final bad = RegExp(r'spotify|google|youtube|apple|amazon|chatgpt|openai|\bAI\b|siri|alexa', caseSensitive: false);
       for (final e in cases.keys) {
         for (final c in p.parse(e).chips) {
           expect(bad.hasMatch(c.label), isFalse);

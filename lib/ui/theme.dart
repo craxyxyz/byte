@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'kit/glass_policy.dart';
 
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
@@ -162,17 +163,13 @@ class Glass extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final content = BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: tint ?? cs.surface.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.62 : 0.72),
-          borderRadius: radius,
-          border: border,
-        ),
-        child: child,
-      ),
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final c = tint ?? cs.surface.withValues(alpha: dark ? 0.62 : 0.72);
+    final Widget box = DecoratedBox(
+      decoration: BoxDecoration(color: c.withValues(alpha: frostedAlpha(c.a, dark: dark)), borderRadius: radius, border: border),
+      child: child,
     );
+    final content = liveBlur() ? BackdropFilter(filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur), child: box) : box;
     return radius == null ? ClipRect(child: content) : ClipRRect(borderRadius: radius!, child: content);
   }
 }

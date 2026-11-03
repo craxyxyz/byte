@@ -227,6 +227,16 @@ export function pickFormat(player: any, q: string, mp4: boolean): { url: string;
   return { url: f.url, mime: String(f.mimeType).split(';')[0], length: Number(f.contentLength ?? 0) };
 }
 
+/** What ?play answers when the catalogue's robot check blocks this server. */
+export const BOT_BLOCKED = 'blocked: bot check. The music service is blocking this server\'s address, so songs cannot be fetched from here';
+
+/** The catalogue's "Sorry…" / robot-check page instead of a JSON answer. */
+export function isBotPage(status: number, contentType: string | null, text: string): boolean {
+  const html = (contentType ?? '').includes('text/html') || text.trimStart().startsWith('<');
+  if (!html) return false;
+  return status === 403 || status === 429 || /<title>\s*Sorry/i.test(text) || /unusual traffic|not a robot|captcha/i.test(text);
+}
+
 export class PlayError extends Error {
   constructor(msg: string, public status = 502) {
     super(msg);
@@ -251,7 +261,14 @@ async function resolveStream(videoId: string, q: string, mp4: boolean, fresh = f
         headers: { 'content-type': 'application/json', 'user-agent': c.ua, ...(vd ? { 'x-goog-visitor-id': vd } : {}), origin: 'https://www.youtube.com' },
         body: JSON.stringify(body),
       });
-      const j = await r.json();
+      const text = await r.text();
+      if (isBotPage(r.status, r.headers.get('content-type'), text)) {
+        // The catalogue answers this server's address with its "Sorry…" robot
+        // check page (seen 2026-11-03 for every client and host). Every client
+        // gets the same page, so stop and say so plainly.
+        throw new PlayError(BOT_BLOCKED, 503);
+      }
+      const j = JSON.parse(text);
       const status = j?.playabilityStatus?.status;
       if (status === 'OK') {
         const f = pickFormat(j, q, mp4);
@@ -269,6 +286,7 @@ async function resolveStream(videoId: string, q: string, mp4: boolean, fresh = f
       }
       reason = j?.playabilityStatus?.reason ?? status ?? `HTTP ${r.status}`;
     } catch (e) {
+      if (e instanceof PlayError) throw e;
       reason = String(e);
     }
   }

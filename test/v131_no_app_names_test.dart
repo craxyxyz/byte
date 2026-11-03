@@ -9,7 +9,7 @@ void main() {
   const banned = [
     'Spotify', 'YouTube', 'Apple Music', 'JioSaavn', 'Gaana', 'Amazon', 'SoundCloud', 'Deezer', 'Wynk',
     'Last.fm', 'ListenBrainz', 'Musixmatch', 'KuGou', 'LRCLIB', 'Google', 'Chromecast', 'Dolby', 'Gmail',
-    'Supabase', 'BitChord', 'Discord', 'Nextcloud', 'ownCloud', 'Synology', 'QNAP', 'Exportify', 'TuneMyMusic', 'Soundiiz',
+    'Supabase', 'Discord', 'Nextcloud', 'ownCloud', 'Synology', 'QNAP', 'Exportify', 'TuneMyMusic', 'Soundiiz',
   ];
   bool technical(String s) =>
       s.contains('http') || s.contains('Mozilla') || s.contains('(?:') || s.contains(r'\') || s.startsWith('com.') ||

@@ -5,6 +5,7 @@ import 'package:byte/ui/lyrics_view.dart';
 import 'package:byte/ui/now_playing.dart';
 import 'package:byte/ui/player_parts.dart';
 import 'package:flutter/material.dart';
+import 'package:byte/ui/kit/line_fill.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers.dart';
@@ -121,7 +122,8 @@ void main() {
     // it sits between the title and the progress bar
     final lyricY = tester.getCenter(find.byKey(const ValueKey('mini-lyric'))).dy;
     expect(lyricY, lessThan(tester.getTopLeft(find.byType(SeekBar)).dy));
-    expect(find.byType(MiniLyricFill), findsOneWidget);
+    // 2.0: the lit part follows the clock without rebuilding (LineFill)
+    expect(find.byType(LineFill), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('mini-lyric')));
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 150));

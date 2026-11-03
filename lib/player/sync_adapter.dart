@@ -8,14 +8,14 @@ import '../data/listen_together.dart';
 import 'byte_handler.dart';
 
 /// Lets Listen together drive (and watch) Byte's real player.
-class HandlerSyncPlayer implements SyncPlayer, PartyClockPlayer {
+class HandlerSyncPlayer implements SyncPlayer, PartyClockPlayer, PartyHoldPlayer {
   final ByteAudioHandler h;
   final ValueNotifier<int> _changes = ValueNotifier(0);
   final List<StreamSubscription> _subs = [];
   bool? _lastPlaying;
 
   HandlerSyncPlayer(this.h) {
-    h.current.addListener(_bump);
+    h.current.addListener(_onSong);
     _subs.add(
       // Real sound, not the lock screen's "playing": during the pause between
       // songs (1.4.5) the party hears the next song start when the host's does.
@@ -37,6 +37,14 @@ class HandlerSyncPlayer implements SyncPlayer, PartyClockPlayer {
   }
 
   void _bump() => _changes.value++;
+
+  // 1.4.6: a new song is one change. Its "playing" is read with it, so the
+  // sound stopping for the switch isn't sent again as a second change (it
+  // was logged as "Seeked to 0:00" and then a "Played" tap).
+  void _onSong() {
+    _lastPlaying = h.audible;
+    _bump();
+  }
 
   bool _wasStalled = false;
 
@@ -80,17 +88,24 @@ class HandlerSyncPlayer implements SyncPlayer, PartyClockPlayer {
     // Paused: load it without a blip of sound first.
     await h.playItems([item], startPaused: !play);
     if (at > const Duration(seconds: 1)) await h.seek(at);
-    if (!play) await h.pause();
+    if (!play) await h.partyPause(); // the party paused it, not the person
+    h.partyMoved();
   }
+
+  @override
+  set partyHold(bool v) => h.partyHold = v;
 
   @override
   Future<void> seekTo(Duration d) => h.seek(d);
 
   @override
-  Future<void> setPlaying(bool play) => play ? h.play() : h.pause();
+  Future<void> setPlaying(bool play) async {
+    if (play) return h.play();
+    await h.partyPause();
+  }
 
   void dispose() {
-    h.current.removeListener(_bump);
+    h.current.removeListener(_onSong);
     h.seeks.removeListener(_bump);
     for (final s in _subs) {
       s.cancel();

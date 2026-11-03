@@ -54,6 +54,9 @@ void main() {
   testWidgets('lyric clock: per frame while playing, no frames while paused, back on play', (tester) async {
     var playing = true;
     LyricsPace.isPlaying = () => playing;
+    // the per-frame mode (1.4.6: every platform now defaults to 30×/s)
+    LyricsPace.playingStepMs = 0;
+    addTearDown(() => LyricsPace.playingStepMs = 40);
     await tester.pumpWidget(const _Ticking());
     final st = tester.state<_TickingState>(find.byType(_Ticking));
     for (var i = 0; i < 10; i++) {
@@ -76,10 +79,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('computers: a playing song\'s lyrics move 30×/s on a timer, not every refresh', (tester) async {
+  testWidgets('computers: a playing song\'s lyrics move 25×/s (2.0) on a timer, not every refresh', (tester) async {
     LyricsPace.isPlaying = () => true;
-    LyricsPace.playingStepMs = 33;
-    addTearDown(() => LyricsPace.playingStepMs = 0);
+    LyricsPace.playingStepMs = 40;
     await tester.pumpWidget(const _Ticking());
     final st = tester.state<_TickingState>(find.byType(_Ticking));
     await tester.pump(const Duration(milliseconds: 16));
@@ -88,7 +90,7 @@ void main() {
     expect(tester.binding.hasScheduledFrame, isFalse);
     final before = st.ticks;
     await tester.pump(const Duration(seconds: 1));
-    expect(st.ticks - before, inInclusiveRange(28, 32));
+    expect(st.ticks - before, inInclusiveRange(23, 27));
     await tester.pumpWidget(const SizedBox());
   });
 

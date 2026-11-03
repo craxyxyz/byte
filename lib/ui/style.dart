@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'kit/glass_policy.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -188,7 +189,8 @@ class GlassBox extends StatelessWidget {
     final shine = on && st.liquidGlass;
     final fade = fadeBottom && on && st.progressiveBlur;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final color = tint ?? (on ? p.glass : Color.alphaBlend(p.glass.withValues(alpha: 1), p.bg));
+    final base = tint ?? (on ? p.glass : Color.alphaBlend(p.glass.withValues(alpha: 1), p.bg));
+    final color = on ? base.withValues(alpha: frostedAlpha(base.a, dark: dark)) : base;
     final sigma = GlassPerf.light.value ? blur * 0.3 : blur;
     // 1.4.1 fix: the tint and the light sheen are two layers. They used to be
     // one BoxDecoration with both a colour and a gradient, and a gradient
@@ -218,8 +220,8 @@ class GlassBox extends StatelessWidget {
       ),
       child: inner,
     );
-    if (on) body = BackdropFilter(filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: body);
-    if (fade) {
+    if (on && liveBlur()) body = BackdropFilter(filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: body);
+    if (fade && liveBlur()) {
       body = ShaderMask(
         blendMode: BlendMode.dstIn,
         shaderCallback: (r) => const LinearGradient(
@@ -542,14 +544,20 @@ class GroupRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: BT.body.copyWith(color: titleColor ?? p.label)),
-                          ),
-                          if (badge != null) ...[const SizedBox(width: 8), badge!],
-                        ],
-                      ),
+                      // 1.4.6: a badge ("IN USE") that doesn't fit beside the
+                      // title moves under it instead of spilling off the row.
+                      if (badge == null)
+                        Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: BT.body.copyWith(color: titleColor ?? p.label))
+                      else
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 2,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: BT.body.copyWith(color: titleColor ?? p.label)),
+                            badge!,
+                          ],
+                        ),
                       if (subtitle != null && subtitle!.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(subtitle!, maxLines: 3, overflow: TextOverflow.ellipsis, style: BT.sub.copyWith(color: p.secondary)),

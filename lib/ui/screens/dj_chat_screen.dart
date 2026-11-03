@@ -127,7 +127,7 @@ class DjChatScreenState extends State<DjChatScreen> {
   Future<void> mic() async {
     if (listening) {
       await s.speech.stop();
-      setState(() => listening = false);
+      if (mounted) setState(() => listening = false);
       return;
     }
     _mic ??= await s.speech.init();

@@ -323,6 +323,45 @@ class AudioLab extends ChangeNotifier {
 
   void resetEq() => applyPreset('Flat');
 
+  // ── Headphone correction (2.0) ──
+  // Flattens the chosen headphones toward a neutral target; it sits under
+  // the person's own curve (both play together). Personal: never shared in a
+  // party (the guest's headphones are not the host's).
+  bool get hpOn => _g('hpOn', false);
+  set hpOn(bool v) => _s('hpOn', v && hpNodes.isNotEmpty);
+  String? get hpName => _m['hpName'] as String?;
+  String? get hpSource => _m['hpSource'] as String?;
+  List<EqNode> get hpNodes {
+    final l = _m['hpNodes'];
+    if (l is List) return [for (final x in l.whereType<Map>()) EqNode.fromJson(x)];
+    return const [];
+  }
+
+  double get hpPreamp => _g('hpPre', 0.0);
+
+  /// Uses [nodes] (from a headphone profile) as the correction and turns it on.
+  void setHeadphone(String name, String source, double preamp, List<EqNode> nodes) {
+    _m['hpName'] = name;
+    _m['hpSource'] = source;
+    _m['hpPre'] = preamp;
+    _m['hpNodes'] = [for (final x in nodes) x.toJson()];
+    _s('hpOn', nodes.isNotEmpty);
+  }
+
+  void clearHeadphone() {
+    _m.remove('hpName');
+    _m.remove('hpSource');
+    _m.remove('hpPre');
+    _m.remove('hpNodes');
+    _s('hpOn', false);
+  }
+
+  /// Whether any curve (correction or own EQ) is applied.
+  bool get anyEq => eqOn || (hpOn && hpNodes.isNotEmpty);
+
+  /// Everything the band processor plays: the correction, then the own curve.
+  List<EqNode> get activeNodes => [if (hpOn) ...hpNodes, if (eqOn) ...nodes];
+
   void setNode(int i, EqNode n) {
     final l = nodes;
     if (i < 0 || i >= l.length) return;
@@ -345,7 +384,7 @@ class AudioLab extends ChangeNotifier {
   set preamp(double v) => _s('preamp', v.clamp(-15.0, 6.0));
   bool get autoPreamp => _g('autoPre', true);
   set autoPreamp(bool v) => _s('autoPre', v);
-  double get effectivePreamp => !eqOn ? 0 : (autoPreamp ? EqMath.autoPreamp(nodes) : preamp);
+  double get effectivePreamp => !anyEq ? 0 : (autoPreamp ? EqMath.autoPreamp(activeNodes) : preamp + (hpOn ? hpPreamp : 0));
 
   // ── Reverb ──
   bool get reverbOn => _g('rvOn', false);
@@ -440,18 +479,19 @@ class AudioLab extends ChangeNotifier {
 
   /// Everything the phone's sound processor needs.
   Map<String, Object?> nativeConfig() {
-    final b = EqMath.bands(nodes);
+    final b = EqMath.bands(activeNodes);
     final ld = loudOn;
     final xfOn = crossfeedOn && !crossfeedSpeakers;
+    final eq = anyEq;
     return {
-      'eqOn': eqOn,
+      'eqOn': eq,
       'cutoffs': b.cutoffs,
-      'gains': eqOn ? b.gains : List<double>.filled(b.gains.length, 0),
+      'gains': eq ? b.gains : List<double>.filled(b.gains.length, 0),
       'inputGain': effectivePreamp + (ld ? loudBoost : 0),
       'mbcOn': ld,
       'ratio': 1 + loudComp * 5,
       'threshold': -6 - loudComp * 24,
-      'limiterOn': eqOn || ld,
+      'limiterOn': eq || ld,
       'rvOn': reverbOn,
       'rvMix': rv('mix'),
       'rvSize': rv('size'),

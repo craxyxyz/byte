@@ -224,13 +224,20 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
   // During the pause between songs the next one waits at its start (the
   // deck may still hold the song that just ended).
-  Duration get position => _restoredAt ?? (inGap && !_gapLoaded ? Duration.zero : _cur.position);
+  Duration get position => _restoredAt ?? _switchingTo ?? (inGap && !_gapLoaded ? Duration.zero : _cur.position);
+
+  /// 1.4.6: set from the moment a new song is announced (current changes)
+  /// until it is loaded and starting. In between, the deck still holds the
+  /// OLD song (its spot, still playing): a party host sent "new song, at the
+  /// old song's 1:00, playing" and every guest started the next song in the
+  /// middle. While switching, the player says: new song, at its start, silent.
+  Duration? _switchingTo;
   Duration? get duration => remote?.remoteDuration ?? _cur.duration ?? (current.value?.durationSec == null ? null : Duration(seconds: current.value!.durationSec!));
   bool get playing => remote != null ? remote!.remotePlaying : (_cur.playing || inGap);
 
   /// Is sound actually coming out (false during the pause between songs)?
   /// Listen together follows this, so guests start with the host.
-  bool get audible => remote != null ? remote!.remotePlaying : (_cur.playing && _cur.processingState != ProcessingState.completed);
+  bool get audible => remote != null ? remote!.remotePlaying : (_switchingTo == null && _cur.playing && _cur.processingState != ProcessingState.completed);
 
   // ── 1.4.5: a short silence between songs ──────────────────────────────
   /// Apurba: "ek song khatam hone ke baad dusra song turant suru ho ja raha
@@ -258,6 +265,54 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   /// Listen together closes a small drift by playing this deck a touch
   /// faster or slower (0.98–1.02) for a moment; the person's speed setting
   /// is kept (it's multiplied, never saved).
+  // ── 1.4.6: a party guest stays "playing" between songs ──────────────
+  // Apurba: "party mood mah guest wala app seh bahar jayeh toh uska song off
+  // jata ha". Android keeps the phone awake (wake lock) and Byte in the
+  // foreground only while the media session says "playing". A guest's player
+  // holds just the party's song, so at every song end it said "stopped" until
+  // the host's next song was loaded and started; with the guest out of the
+  // app / screen off the phone fell asleep in that window and the next song
+  // never started. The host never had this: its gap keeps it "playing".
+  // While a guest follows a playing party, Listen together sets [partyHold]
+  // and the session keeps saying "playing" (speed 0 while silent), exactly
+  // like the host's gap. A pause or stop by hand still shows as paused.
+  bool _partyHold = false;
+  bool _holdOff = false; // paused / stopped by hand since the party last moved this player
+
+  /// The session says "playing" while the party is between songs here.
+  bool get partyHold => _partyHold && !_holdOff && current.value != null && remote == null;
+  set partyHold(bool v) {
+    if (v == _partyHold) return;
+    _partyHold = v;
+    _broadcast(_cur);
+  }
+
+  /// The party (not the person) just loaded / paused / played this player.
+  void partyMoved() {
+    if (!_holdOff) return;
+    _holdOff = false;
+    _broadcast(_cur);
+  }
+
+  bool _partyPausing = false;
+
+  /// A pause the party asks for (the next song waits for its start): not a
+  /// pause by hand, so the phone stays held "playing".
+  Future<void> partyPause() async {
+    _partyPausing = true;
+    try {
+      await pause();
+    } finally {
+      _partyPausing = false;
+    }
+  }
+
+  void _handOff() {
+    if (_holdOff || _partyPausing) return;
+    _holdOff = true;
+    if (_partyHold) _broadcast(_cur);
+  }
+
   Future<void> setPartyRate(double r) async {
     if (remote != null || _fading || _ease != null) return; // a blend owns the speed
     try {
@@ -320,6 +375,10 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   /// Where a freshly loaded song would start: now, or after the gap.
   void _startLoaded(int token) {
+    if (_switchingTo != null) {
+      _switchingTo = null;
+      _broadcast(_cur); // the new song's own spot and sound, now
+    }
     if (token == _gapToken) {
       if (_gapHeld) {
         _clearGap();
@@ -395,6 +454,12 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   /// Web build: the address a song's audio streams from (see lib/web/).
   static Uri Function(String videoId, AudioQuality q)? webPlayUrl;
+
+  /// 1.4.6 (web): asks the Byte web server why a song didn't load. A
+  /// message means playing in the browser is blocked for every song (the
+  /// catalogue's bot check on the server's address): say so and stop,
+  /// instead of "Couldn't play …, skipped" through the whole queue.
+  static Future<String?> Function(String videoId)? webPlayProblem;
 
   /// Addon and SMB songs: the app wires these up (see services.dart).
   Future<AudioSource?> Function(Item it)? externalSource;
@@ -545,6 +610,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> playItems(List<Item> items, {int start = 0, bool? shuffle, bool radio = false, bool rememberShuffle = true, String? from, bool startPaused = false}) async {
     final playable = items.where((i) => i.isPlayable).toList();
     if (playable.isEmpty) return;
+    if (!startPaused) _holdOff = false; // a new song by hand or by the party
     final s = start.clamp(0, playable.length - 1);
     playingFrom.value = from ??
         (radio
@@ -786,6 +852,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> play() async {
     if (current.value == null) return;
     if (remote != null) return remote!.remotePlay();
+    _holdOff = false;
     // Play during the pause between songs: start the next one now.
     if (_gapToken >= 0 && _gapToken == _loadToken) {
       if (_gapLoaded) {
@@ -828,6 +895,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   @override
   Future<void> pause() async {
     if (remote != null) return remote!.remotePause();
+    _handOff();
     if (_holdGap()) return;
     _cancelFade(finishIncoming: true);
     final fade = pauseFadeMs();
@@ -843,8 +911,10 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> stop() async {
+    _handOff();
     _userStopped = true; // 1.4.5: only Stop (or a swipe) takes the notification away
     _restoredAt = null;
+    _switchingTo = null;
     _clearGap();
     _cancelFade(finishIncoming: false);
     await _cur.stop();
@@ -860,6 +930,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       return remote!.remoteSeek(position);
     }
     _cancelFade(finishIncoming: true);
+    if (_switchingTo != null) _switchingTo = position; // still loading the new song: keep the spot honest
     if (_restoredAt != null && _cur.processingState == ProcessingState.idle) {
       _restoredAt = position; // 1.4.5: restored, not loaded yet: remember the spot
       clock.set(position.inMilliseconds);
@@ -1069,6 +1140,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _healthyFromMs = startAt?.inMilliseconds ?? 0;
     _stallSince = null;
     error.value = null;
+    _switchingTo = remote == null ? (startAt ?? Duration.zero) : null;
     current.value = it;
     sessionSeen.add(it.id);
     if (it.isOnPhone) unawaited(AudioFormats.of(it.id.substring(6))); // the real format, for the badge
@@ -1119,9 +1191,16 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       _startLoaded(token);
     } catch (e) {
       if (token != _loadToken) return;
+      _switchingTo = null;
       await _handleLoadError(it, e, startAt);
     } finally {
-      if (token == _loadToken) loading.value = false;
+      if (token == _loadToken) {
+        loading.value = false;
+        if (_switchingTo != null) {
+          _switchingTo = null;
+          _broadcast(_cur);
+        }
+      }
     }
   }
 
@@ -1149,6 +1228,18 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final token = _loadToken;
     Object err = e;
     try {
+      if (webPlayProblem != null && !it.isLocal) {
+        String? why;
+        try {
+          why = await webPlayProblem!(it.id);
+        } catch (_) {}
+        if (token != _loadToken) return;
+        if (why != null) {
+          error.value = why;
+          _broadcast(_cur);
+          return;
+        }
+      }
       while (!it.isLocal && _attempts < maxAttempts) {
         _attempts++;
         if (_attempts > 1) {
@@ -1372,6 +1463,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     try {
       if (sleep.value.$1 == SleepMode.endOfTrack) {
         sleep.value = (SleepMode.off, null);
+        _handOff(); // a party guest stops here too
         await _cur.pause();
         await _cur.seek(Duration.zero);
         return;
@@ -1643,6 +1735,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _activePlan = plan;
     _fadeMs = max(1, fadeMs);
     _fadingOut = _cur;
+    _switchingTo = null;
     _outGain = _gainFor(current.value) / (_duck == 0 ? 1 : _duck);
     if (plan != null && _normalizeNow) _gains[incoming.id] = plan.inGain;
     _cur = _idle;
@@ -1785,7 +1878,8 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       remoteChanged();
       return;
     }
-    final playingNow = p.playing || inGap;
+    final hold = partyHold && !p.playing;
+    final playingNow = p.playing || inGap || hold;
     playbackState.add(
       PlaybackState(
         controls: [MediaControl.skipToPrevious, if (playingNow) MediaControl.pause else MediaControl.play, MediaControl.skipToNext],
@@ -1805,13 +1899,13 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
                       }[p.processingState]!),
           hasSong: current.value != null,
           stopped: _userStopped,
-          playing: playingNow,
+          playing: p.playing || inGap,
         ),
         playing: playingNow,
         updatePosition: _restoredAt ?? p.position,
         bufferedPosition: p.bufferedPosition,
         // during the pause between songs the next one waits at 0:00
-        speed: inGap && !p.playing ? 0 : p.speed,
+        speed: (inGap || hold) && !p.playing ? 0 : p.speed,
         queueIndex: queueModel.position < 0 ? null : queueModel.position,
         shuffleMode: queueModel.shuffle ? AudioServiceShuffleMode.all : AudioServiceShuffleMode.none,
         repeatMode: switch (queueModel.repeat) {

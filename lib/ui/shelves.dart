@@ -32,7 +32,7 @@ class ShelfView extends StatelessWidget {
       children: [
         SectionTitle(shelf.title, action: more == null ? null : 'Show all', onAction: more),
         SizedBox(
-          height: shelf.items.any((i) => i.kind == ItemKind.video) && shelf.items.every((i) => i.kind == ItemKind.video) ? 196 : 214,
+          height: (shelf.items.any((i) => i.kind == ItemKind.video) && shelf.items.every((i) => i.kind == ItemKind.video) ? 196 : 214) + textGrow(context, 48),
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             scrollDirection: Axis.horizontal,
@@ -72,7 +72,7 @@ class PagedSongGrid extends StatelessWidget {
     final w = MediaQuery.sizeOf(context).width;
     final colW = w >= 820 ? 380.0 : w - 40;
     final cols = (items.length / 4).ceil();
-    const rowH = 62.0;
+    final rowH = 62.0 + textGrow(context, 50); // 1.4.6: taller rows with large text
     return SizedBox(
       height: (items.length < 4 ? items.length : 4) * rowH,
       child: ListView.builder(

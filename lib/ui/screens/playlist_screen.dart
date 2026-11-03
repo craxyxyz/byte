@@ -7,6 +7,9 @@ import '../widgets.dart';
 import '../glass.dart';
 
 /// A playlist saved in Byte: play, shuffle, rename, reorder, remove, download.
+/// What Add to queue / Download all say on a playlist with no songs (1.4.6).
+const emptyPlaylistMessage = 'This playlist is empty. Add some songs first.';
+
 class PlaylistScreen extends StatelessWidget {
   final String id;
   const PlaylistScreen({super.key, required this.id});
@@ -31,6 +34,10 @@ class PlaylistScreen extends StatelessWidget {
                     case 'rename':
                       final n = await promptText(context, title: 'Rename playlist', initial: p.name);
                       if (n != null) await lib.renamePlaylist(id, n);
+                    case 'download' when items.isEmpty:
+                    case 'queue' when items.isEmpty:
+                      // 1.4.6: an empty playlist used to say nothing (or "Added to queue").
+                      if (context.mounted) toast(context, emptyPlaylistMessage);
                     case 'download':
                       await Services.i.downloads.downloadPlaylist(id, items);
                       if (context.mounted) toast(context, 'Downloading ${songCount(items.length)}');

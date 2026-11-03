@@ -215,7 +215,9 @@ class Library extends ChangeNotifier {
 
   Future<void> reorderPlaylistItem(String id, int from, int to) async {
     final p = playlist(id);
-    if (p == null) return;
+    // 1.4.6: a stale index (the list changed by sync while dragging) did
+    // throw a RangeError; it does nothing now.
+    if (p == null || from < 0 || from >= p.items.length) return;
     final it = p.items.removeAt(from);
     p.items.insert(to.clamp(0, p.items.length), it);
     await savePlaylist(p);
@@ -223,6 +225,7 @@ class Library extends ChangeNotifier {
 
   Future<void> reorderPlaylists(int from, int to) async {
     final ids = playlists.map((p) => p.id).toList();
+    if (from < 0 || from >= ids.length) return;
     final id = ids.removeAt(from);
     ids.insert(to.clamp(0, ids.length), id);
     await _misc.put('playlist_order', ids);

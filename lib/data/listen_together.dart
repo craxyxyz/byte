@@ -42,6 +42,12 @@ abstract class SyncPlayer {
 /// [SyncPlayer] that also implements this gets rate nudges instead of seeks,
 /// tells the party when its stream is stuck, and shares the scheduled start
 /// of the next song and what comes after it.
+/// 1.4.6: a player whose phone can be kept "playing" (awake, in the
+/// foreground on Android) while a guest waits for the party's next song.
+abstract class PartyHoldPlayer {
+  set partyHold(bool v);
+}
+
 abstract class PartyClockPlayer {
   /// Meant to be playing but no sound is coming (buffering: the host's
   /// screen went off and its net is throttled). Its position stands still.
@@ -290,6 +296,10 @@ class ListenTogether extends ChangeNotifier {
   static Duration heartbeat = const Duration(seconds: 4);
   static const maxActivity = 100;
   static Duration reconnectAfter = const Duration(seconds: 5);
+
+  /// 1.4.6: how long past the party's song end (+ the pause) a guest keeps
+  /// its phone "playing" while waiting for the host's next song.
+  static int holdGraceMs = 20000;
 
   /// A song change or stop this close to the end of the party's song is the
   /// phone moving on by itself; only the host's phone picks what comes next.
@@ -761,6 +771,41 @@ class ListenTogether extends ChangeNotifier {
     }
   }
 
+  bool _holding = false;
+  int _holdUntil = 0; // host clock: keep holding through the song end until
+
+  /// 1.4.6 (guest out of the app → song off): while this guest follows a
+  /// playing party (a song, or the pause before the next one), its player
+  /// keeps the phone awake and in the foreground through the song changes,
+  /// like the host's own gap. Never on the host; off when the party is
+  /// paused, the song is long over with no word from the host, or we left.
+  void _updateHold() {
+    var want = false;
+    final l = last;
+    if (active && !isHost && l != null && l.item != null) {
+      final now = hostNow;
+      final sa = l.startAt;
+      if (l.playing) {
+        final d = l.item!.durationSec;
+        final until = d == null || d <= 0 ? now + holdGraceMs : _songEndHostMs(l) + followGapMs + holdGraceMs;
+        _holdUntil = max(_holdUntil, until);
+        want = now < until;
+      } else if (sa != null) {
+        want = now < sa + holdGraceMs;
+      } else if (l.action == null || l.action!.startsWith('Changed the song')) {
+        // the song-end stop / the next song being switched in on the host
+        want = now < _holdUntil;
+      }
+      if (!want && !l.playing && sa == null) _holdUntil = 0; // a real pause / stop
+    } else {
+      _holdUntil = 0;
+    }
+    if (want == _holding) return;
+    _holding = want;
+    final p = player;
+    if (p is PartyHoldPlayer) (p as PartyHoldPlayer).partyHold = want;
+  }
+
   /// The guest's song reached its end: ask the host what's next; if the host
   /// stays quiet, play the next song it told us about, after the pause.
   void _songEnded(RoomState prev) {
@@ -806,6 +851,7 @@ class ListenTogether extends ChangeNotifier {
   }
 
   Future<void> _beatOnce() async {
+    _updateHold();
     if (connected && !net.socketConnected) {
       // The socket died without telling the channel (phone slept, net gone).
       connected = false;
@@ -938,6 +984,18 @@ class ListenTogether extends ChangeNotifier {
   int? lastDriftMs;
   (int, Item?)? _beatNext; // the host's next song as its last heartbeat said
 
+  /// 1.4.6: a 1.4.5 host's "Changed the song" state carried the OLD song's
+  /// spot (the player named the new song before the old one stopped), so
+  /// guests started the next song in the middle. A new song arriving at
+  /// exactly where the old one was is that: it starts at 0:00.
+  static RoomState carriedOver(RoomState? prev, RoomState s) {
+    final p = prev?.item, it = s.item;
+    if (p == null || it == null || p.id == it.id) return s;
+    if (!(s.action?.startsWith('Changed the song') ?? false) || s.positionMs < 3000) return s;
+    if ((s.positionMs - prev!.expectedAt(s.atMs)).abs() > 2000) return s;
+    return RoomState.fromJson({...s.toJson(), 'p': 0});
+  }
+
   /// What the host plays after [prev]'s song (its newest word on it).
   Item? _nextAfter(RoomState? prev) {
     if (prev == null) return null;
@@ -948,6 +1006,7 @@ class ListenTogether extends ChangeNotifier {
   Future<void> _apply(RoomState s, {bool force = false, bool again = false}) async {
     if (!active) return;
     final prev = last;
+    if (!again && s.by != deviceId) s = carriedOver(prev, s);
     if (!again) {
       if (!force && !s.newerThan(prev)) return;
       last = s;
@@ -1009,6 +1068,7 @@ class ListenTogether extends ChangeNotifier {
     } finally {
       _applying = false;
       _quietUntil = _now() + 1500;
+      _updateHold();
       if (_reapply) {
         _reapply = false;
         final l = last;
@@ -1408,6 +1468,7 @@ class ListenTogether extends ChangeNotifier {
     roundTripMs = null;
     hostId = null;
     liveOnly = false;
+    _updateHold();
     notifyListeners();
   }
 

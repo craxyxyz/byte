@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'kit/glass_policy.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -188,8 +189,8 @@ class LiquidGlass extends StatelessWidget {
 
   static Color baseTint({required bool dark, required bool strong, required int level}) {
     if (level == 0) return dark ? const Color(0xFF242428) : const Color(0xFFF7F7F9);
-    if (dark) return Color.fromRGBO(30, 30, 34, strong ? 0.74 : 0.42);
-    return Color.fromRGBO(255, 255, 255, strong ? 0.80 : 0.55);
+    if (dark) return Color.fromRGBO(30, 30, 34, frostedAlpha(strong ? 0.74 : 0.42, dark: true));
+    return Color.fromRGBO(255, 255, 255, frostedAlpha(strong ? 0.80 : 0.55));
   }
 
   @override
@@ -223,7 +224,7 @@ class LiquidGlass extends StatelessWidget {
             ),
           ),
         );
-        if (sigma > 0) body = BackdropFilter(filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: body);
+        if (sigma > 0 && liveBlur()) body = BackdropFilter(filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: body);
         body = ClipRRect(borderRadius: radius, child: body);
         if (!shadow) return body;
         return DecoratedBox(

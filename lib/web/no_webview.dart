@@ -1,19 +1,14 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 
-/// The web build (and Windows/Linux) has no in-app browser (sign-in pages for Google, Spotify,
+/// The web build has no in-app browser (sign-in pages for Google, Spotify,
 /// Last.fm, ListenBrainz need the Byte app). This stand-in lets those screens
 /// open without crashing and says so plainly where the page would be.
 class NoWebViewPlatform extends WebViewPlatform {
   static void install() => WebViewPlatform.instance = NoWebViewPlatform();
 
-  static String get message => kIsWeb ? _webMessage : _desktopMessage;
-  static const _webMessage = 'This sign-in opens inside the Byte app on your phone or tablet. '
+  static const message = 'This sign-in opens inside the Byte app on your phone or tablet. '
       'On the web, use a Byte account (email) — your likes and playlists sync from the app.';
-  // Windows and Linux have no in-app browser either.
-  static const _desktopMessage = 'This sign-in opens inside the Byte app on your phone or tablet. '
-      'On this computer, use a Byte account (email) — your likes and playlists sync from the app.';
 
   @override
   PlatformWebViewController createPlatformWebViewController(PlatformWebViewControllerCreationParams params) => _Controller(params);

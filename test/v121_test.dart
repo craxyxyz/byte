@@ -47,8 +47,8 @@ void main() {
       final grouped = [for (final g in AppIcons.groups) ...g.$2];
       expect(grouped.length, 15);
       expect(grouped.toSet(), AppIcons.all.map((e) => e.id).toSet());
-      expect(AppIcons.byId('pixel-neon-cyan').shape, IconShape.circle);
-      expect(AppIcons.byId('samsung-glass').shape, IconShape.squircle);
+      expect(AppIcons.byId('round-neon-cyan').shape, IconShape.circle);
+      expect(AppIcons.byId('soft-glass').shape, IconShape.squircle);
     });
 
     test('an icon saved by an older version falls back to Default', () {
@@ -214,7 +214,7 @@ void main() {
           first = false;
         }
       }
-      expect(Brand.version, '1.4.5');
+      expect(Brand.version, '2.0.0');
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 30));
     });
