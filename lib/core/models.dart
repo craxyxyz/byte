@@ -197,3 +197,6 @@ class AccountInfo {
   final String? photo;
   const AccountInfo({required this.name, this.email, this.handle, this.photo});
 }
+
+/// "1 song", "12 songs" (1.4.5 QA: lists said "1 songs").
+String songCount(int n) => n == 1 ? '1 song' : '$n songs';

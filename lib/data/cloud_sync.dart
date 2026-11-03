@@ -525,17 +525,22 @@ class CloudSync extends ChangeNotifier {
   Future<void> _pullAll(SyncBackend b) async {
     var seq = (_meta!.get('seq') as int?) ?? 0;
     var applied = false;
-    while (true) {
-      final rows = await b.pull(seq);
-      if (rows.isEmpty) break;
-      for (final r in rows) {
-        if (await _apply(r)) applied = true;
-        if (r.seq > seq) seq = r.seq;
+    try {
+      while (true) {
+        final rows = await b.pull(seq);
+        if (rows.isEmpty) break;
+        for (final r in rows) {
+          if (await _apply(r)) applied = true;
+          if (r.seq > seq) seq = r.seq;
+        }
+        await _meta!.put('seq', seq);
+        if (rows.length < 500) break;
       }
-      await _meta!.put('seq', seq);
-      if (rows.length < 500) break;
+    } finally {
+      // 1.4.5: what already arrived shows (Home's likes and playlists) even
+      // when the connection drops half way through a big first pull.
+      if (applied) onApplied?.call();
     }
-    if (applied) onApplied?.call();
   }
 
   Future<bool> _apply(SyncRow r) async {

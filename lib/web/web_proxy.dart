@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../core/device_online_stub.dart' if (dart.library.js_interop) '../core/device_online_web.dart' as device;
 import '../core/net_proxy.dart';
 import '../data/listen_together.dart' show Backend;
 
@@ -11,7 +12,7 @@ class WebProxy {
   static Uri get endpoint => Uri.parse(_override.isNotEmpty ? _override : '${Backend.url}/functions/v1/byte-proxy');
 
   static WebProxyNet? _net;
-  static WebProxyNet get net => _net ??= WebProxyNet(endpoint);
+  static WebProxyNet get net => _net ??= WebProxyNet(endpoint, deviceOnline: device.deviceOnline);
 
   /// Up / down, for the banner.
   static ValueNotifier<WebProxyState> get state => net.state;

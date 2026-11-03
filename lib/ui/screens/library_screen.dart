@@ -113,7 +113,7 @@ class _LibraryScreenState extends State<LibraryScreen> with AutomaticKeepAliveCl
                   _Tile(
                     art: const _IconArt(icon: Icons.favorite_rounded, colors: [Color(0xFF6A3DF0), Color(0xFF3F8CFF)]),
                     title: 'Liked Songs',
-                    sub: '${s.library.likes.length} songs',
+                    sub: songCount(s.library.likes.length),
                     onTap: () => pushPage(context, const LikedScreen()),
                   ),
                   for (final l in lists) _playlistTile(context, l),
@@ -141,7 +141,7 @@ class _LibraryScreenState extends State<LibraryScreen> with AutomaticKeepAliveCl
                                 Artwork(a.thumb, size: 92, circle: true, icon: Icons.person_rounded),
                                 const SizedBox(height: 6),
                                 Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: BT.sub.copyWith(color: p.label, fontWeight: FontWeight.w600)),
-                                Text(a.count == 1 ? '1 song' : '${a.count} songs', style: BT.caption.copyWith(color: p.secondary)),
+                                Text(songCount(a.count), style: BT.caption.copyWith(color: p.secondary)),
                               ],
                             ),
                           ),
@@ -189,7 +189,7 @@ class _LibraryScreenState extends State<LibraryScreen> with AutomaticKeepAliveCl
         ? _IconArt(icon: Icons.queue_music_rounded, colors: [BytePalette.of(context).grouped, BytePalette.of(context).grouped], iconColor: BytePalette.of(context).secondary)
         : Artwork(l.artwork, size: 166, radius: 0),
     title: Services.i.library.isPinned(l.id) ? '📌 ${l.name}' : l.name,
-    sub: l.source?.startsWith('account:') == true ? 'From your account' : (importedFrom(l.source) ?? '${l.items.length} songs'),
+    sub: l.source?.startsWith('account:') == true ? 'From your account' : (importedFrom(l.source) ?? songCount(l.items.length)),
     onTap: () => pushPage(context, PlaylistScreen(id: l.id)),
     // long-press: pin to the top / unpin
     onLongPress: () async {

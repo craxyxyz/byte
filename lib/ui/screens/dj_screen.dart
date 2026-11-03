@@ -267,7 +267,7 @@ class _SegmentChip extends StatelessWidget {
               children: [
                 Text(segment.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: BT.bodyStrong.copyWith(color: p.label, fontSize: 15)),
                 const SizedBox(height: 2),
-                Text('${segment.items.length} songs', maxLines: 1, style: BT.caption.copyWith(color: p.secondary)),
+                Text(songCount(segment.items.length), maxLines: 1, style: BT.caption.copyWith(color: p.secondary)),
               ],
             ),
           ),

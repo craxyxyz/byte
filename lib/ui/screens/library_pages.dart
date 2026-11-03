@@ -153,7 +153,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               child: TileHeader(
                 tile: _iconTile(context, Icons.download_rounded),
                 title: 'Downloads',
-                subtitle: recs.isEmpty ? 'Downloaded songs' : '${recs.length} songs · $mb MB',
+                subtitle: recs.isEmpty ? 'Downloaded songs' : '${songCount(recs.length)} · $mb MB',
                 buttons: recs.isEmpty
                     ? const []
                     : [
@@ -216,7 +216,7 @@ class _LocalMusicScreenState extends State<LocalMusicScreen> {
               child: TileHeader(
                 tile: _iconTile(context, Icons.folder_rounded),
                 title: 'Local Music',
-                subtitle: items.isEmpty ? 'Songs on this phone' : '${items.length} songs on this phone',
+                subtitle: items.isEmpty ? 'Songs on this phone' : '${songCount(items.length)} on this phone',
                 buttons: items.isEmpty
                     ? [PillButton(icon: Icons.search_rounded, label: busy ? 'Scanning…' : 'Find songs on this phone', onTap: busy ? null : () => _run(() => s.local.scanDevice()))]
                     : [
@@ -284,7 +284,7 @@ class SpotifyScreen extends StatelessWidget {
                 itemBuilder: (c, i) => _ListRow(
                   art: Artwork(lists[i].artwork, size: 58, radius: 0, icon: Icons.queue_music_rounded),
                   title: lists[i].name,
-                  sub: '${importedFrom(lists[i].source)} · ${lists[i].items.length} songs',
+                  sub: '${importedFrom(lists[i].source)} · ${songCount(lists[i].items.length)}',
                   onTap: () => pushPage(context, PlaylistScreen(id: lists[i].id)),
                 ),
               ),
@@ -352,7 +352,7 @@ class AllPlaylistsScreen extends StatelessWidget {
                   child: _ListRow(
                     art: Artwork(lists[i].artwork, size: 58, radius: 0, icon: Icons.queue_music_rounded),
                     title: lists[i].name,
-                    sub: '${lists[i].items.length} songs',
+                    sub: songCount(lists[i].items.length),
                     onTap: () => pushPage(context, PlaylistScreen(id: lists[i].id)),
                   ),
                 ),
@@ -384,7 +384,7 @@ class LikedScreen extends StatelessWidget {
               child: TileHeader(
                 tile: _iconTile(context, Icons.favorite_rounded, colors: const [Color(0xFF6A3DF0), Color(0xFF3F8CFF)], iconColor: Colors.white),
                 title: 'Liked Songs',
-                subtitle: listSummary(items).isEmpty ? '${items.length} songs' : listSummary(items),
+                subtitle: listSummary(items).isEmpty ? songCount(items.length) : listSummary(items),
                 buttons: items.isEmpty
                     ? const []
                     : [

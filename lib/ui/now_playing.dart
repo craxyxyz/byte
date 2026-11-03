@@ -94,10 +94,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   /// Full-screen lyrics (the controls gone) → the window goes full screen;
   /// it stays so while the lyrics are on screen (a mouse move brings the
   /// controls back, not the title bar), and leaves with the lyrics, Esc or F11.
+  /// 1.4.5 QA: Esc left full screen; the lyrics don't take the screen
+  /// again by themselves until they are opened again.
+  bool _escaped = false;
+
   void _syncFullscreen() {
     if (!mounted) return;
+    if (!_lyricsOnScreen) _escaped = false;
     final lyricsFull = _lyricsOnScreen && (LyricsPane.idle.value || LyricsPane.browsing.value);
-    if (lyricsFull && !AppFullscreen.active.value) {
+    if (lyricsFull && !AppFullscreen.active.value && !_escaped) {
       unawaited(AppFullscreen.enter());
       _wakeCursor();
     } else if (!_lyricsOnScreen && AppFullscreen.active.value) {
@@ -107,7 +112,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
   bool _onKey(KeyEvent e) {
     if (!mounted) return false;
+    final wasFull = AppFullscreen.active.value;
     final handled = AppFullscreen.handleKey(e);
+    if (handled && wasFull && e.logicalKey == LogicalKeyboardKey.escape) {
+      // Esc = back to normal: the window and the controls (before, the
+      // controls stayed hidden and the lyrics went full screen again).
+      _escaped = true;
+      _idleTimer?.cancel();
+      LyricsPane.idle.value = false;
+    }
     if (handled) setState(() {});
     return handled;
   }
@@ -795,7 +808,10 @@ class _SongArt extends StatelessWidget {
     final full = Services.i.settings.fullScreenCover;
     return LayoutBuilder(
       builder: (context, c) {
-        final art = full ? c.maxWidth.clamp(120.0, c.maxHeight) : (c.maxWidth - 48).clamp(120.0, (c.maxHeight - 16).clamp(120.0, 620.0));
+        // 1.4.5 QA: a short space (a phone turned sideways, a small window)
+        // made clamp(120, <120) throw and the player drew an error box.
+        final double hi = full ? math.max(0.0, c.maxHeight) : (c.maxHeight - 16).clamp(0.0, 620.0).toDouble();
+        final double art = (full ? c.maxWidth : c.maxWidth - 48).clamp(math.min(120.0, hi), hi).toDouble();
         return StreamBuilder<PlaybackState>(
           stream: Services.i.player.playbackState,
           builder: (context, s) {

@@ -81,6 +81,27 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  testWidgets('desktop (QA): Esc while the lyrics fill the screen brings the window AND the controls back, and they stay', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(tester.view.reset);
+    sv.settings.lyricsAutoFullScreen = true;
+    await openPlayer(tester, sv);
+    await tester.tap(find.byTooltip('Lyrics'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await quiet(tester);
+    expect(win.full, isTrue);
+    expect(find.byTooltip('Close'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(win.full, isFalse);
+    expect(LyricsPane.idle.value, isFalse);
+    expect(find.byTooltip('Close'), findsOneWidget, reason: 'the controls are back');
+    await quiet(tester);
+    expect(win.calls, [true, false], reason: 'no going full screen again by itself');
+    await closeAll(tester, sv);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   testWidgets('desktop: leaving the lyrics or closing the player restores the window', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     addTearDown(tester.view.reset);

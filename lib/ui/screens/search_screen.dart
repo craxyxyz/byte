@@ -411,7 +411,7 @@ class SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClien
           const SectionTitle('Playlists'),
           for (final l in lists)
             ItemRow(
-              item: Item(kind: ItemKind.playlist, id: 'local:${l.id}', title: l.name, thumb: l.artwork, subtitle: '${l.items.length} songs'),
+              item: Item(kind: ItemKind.playlist, id: 'local:${l.id}', title: l.name, thumb: l.artwork, subtitle: songCount(l.items.length)),
               onTap: () => openLocalPlaylist(context, l.id),
             ),
         ],

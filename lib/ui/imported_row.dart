@@ -1,6 +1,6 @@
 // Byte © 2026 Apurba Laskar.
 //
-// Home → "From your music apps" (1.4.2, Apurba): every playlist brought in
+// Home → "From <app>" shelves (1.4.2, Apurba; one shelf per app since 1.4.5): every playlist brought in
 // from another music app — by log-in or by link, from any number of apps —
 // plus the liked songs, as the very first row of Home. Tap: it plays and opens.
 
@@ -8,10 +8,8 @@ import 'package:flutter/material.dart';
 
 import '../core/models.dart';
 import '../data/library.dart';
-import '../data/service_library.dart' show LibService;
 import '../services.dart';
 import 'nav.dart';
-import 'screens/library_pages.dart' show LikedScreen;
 import 'screens/playlist_screen.dart';
 import 'service_rows.dart' show playlistsInServiceRows;
 import 'style.dart';
@@ -54,58 +52,62 @@ List<LocalPlaylist> importedPlaylists(Library lib) {
 class ImportedRow extends StatelessWidget {
   const ImportedRow({super.key});
 
+  // 1.4.5: listens itself. Home builds this row as a const child, so a
+  // parent rebuild never reached it and a new import only showed after a
+  // restart or a pull to refresh.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(listenable: Services.i.library, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
     final lib = Services.i.library;
     // 1.4.4: a logged-in account's playlists have their own row ("From
     // Spotify") just above; this row keeps the rest (links, other sources).
     final inRows = playlistsInServiceRows(lib);
     final lists = importedPlaylists(lib).where((p) => !inRows.contains(p.id)).toList();
-    final likes = lib.likes;
-    var fromApps = false;
-    try {
-      fromApps = Services.i.spotify.connected || LibService.values.any(Services.i.libSync.connected);
-    } catch (_) {}
-    // the service rows already carry Liked Songs: nothing left → no row
-    if (fromApps && lists.isEmpty) return const SizedBox.shrink();
-    // nothing imported yet: no row at all
-    if (lists.isEmpty && !(fromApps && likes.isNotEmpty)) return const SizedBox.shrink();
+    // 1.4.5: Liked songs moved to the top of Home (HomeLibraryRows), for
+    // every account; this row only keeps playlists from other apps.
+    if (lists.isEmpty) return const SizedBox.shrink();
+    // 1.4.5 (Apurba: imported playlists show like "Your playlists"): one
+    // shelf per app, "From Spotify", "From JioSaavn" …, same cards; lists
+    // from a web page, a song list or a file share one "Imported lists" shelf.
+    final shownInRows = {for (final p in lib.playlists) if (inRows.contains(p.id)) importSourceLabel(p.source)};
+    final groups = <String, List<LocalPlaylist>>{};
+    for (final p in lists) {
+      final label = importSourceLabel(p.source)!;
+      final title = const {'Web page', 'Song list', 'File'}.contains(label)
+          ? 'Imported lists'
+          : shownInRows.contains(label)
+          ? 'More from $label'
+          : 'From $label';
+      groups.putIfAbsent(title, () => []).add(p);
+    }
     return Column(
       key: const ValueKey('home-imports'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionTitle('From your music apps', padding: EdgeInsets.fromLTRB(16, 12, 16, 10)),
-        SizedBox(
-          height: 206,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: [
-              if (likes.isNotEmpty)
-                _ImportCard(
-                  key: const ValueKey('home-import-liked'),
-                  art: const _LikedArt(),
-                  title: 'Liked songs',
-                  sub: '${likes.length} songs · all apps',
-                  onTap: () {
-                    Services.i.player.playItems(likes, from: 'Liked songs');
-                    pushPage(context, const LikedScreen());
-                  },
-                ),
-              for (final p in lists)
-                _ImportCard(
-                  key: ValueKey('home-import-${p.id}'),
-                  art: _Mosaic(p),
-                  title: p.name,
-                  sub: '${importSourceLabel(p.source)} · ${p.items.length} songs',
-                  onTap: () {
-                    if (p.items.isNotEmpty) Services.i.player.playItems(p.items, from: p.name);
-                    pushPage(context, PlaylistScreen(id: p.id));
-                  },
-                ),
-            ],
+        for (final g in groups.entries) ...[
+          SectionTitle(g.key, padding: const EdgeInsets.fromLTRB(16, 12, 16, 10)),
+          SizedBox(
+            height: 206,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                for (final p in g.value)
+                  _ImportCard(
+                    key: ValueKey('home-import-${p.id}'),
+                    art: PlaylistMosaic(p),
+                    title: p.name,
+                    sub: g.key == 'Imported lists' ? '${importSourceLabel(p.source)} · ${songCount(p.items.length)}' : songCount(p.items.length),
+                    onTap: () {
+                      if (p.items.isNotEmpty) Services.i.player.playItems(p.items, from: p.name);
+                      pushPage(context, PlaylistScreen(id: p.id));
+                    },
+                  ),
+              ],
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -143,9 +145,9 @@ class _ImportCard extends StatelessWidget {
 }
 
 /// The playlist's own cover, else the first four songs' covers in a 2×2 grid.
-class _Mosaic extends StatelessWidget {
+class PlaylistMosaic extends StatelessWidget {
   final LocalPlaylist p;
-  const _Mosaic(this.p);
+  const PlaylistMosaic(this.p, {super.key});
   @override
   Widget build(BuildContext context) {
     final thumbs = <String>[];
@@ -160,18 +162,6 @@ class _Mosaic extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
       children: [for (final t in thumbs) Artwork(t, size: 74, radius: 0)],
-    );
-  }
-}
-
-class _LikedArt extends StatelessWidget {
-  const _LikedArt();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFFFF2D55), Color(0xFF7B2CBF)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
-      alignment: Alignment.center,
-      child: const Icon(Icons.favorite_rounded, color: Colors.white, size: 56),
     );
   }
 }

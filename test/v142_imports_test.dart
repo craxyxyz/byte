@@ -209,7 +209,9 @@ void main() {
     expect(find.text('From Amazon Music'), findsOneWidget);
     expect(find.text('From JioSaavn'), findsOneWidget);
     expect(find.text('From your music apps'), findsNothing);
-    expect(find.text('2 songs'), findsOneWidget);
+    // (1.4.5: the Liked songs card at the top of Home also says "2 songs")
+    final rows = find.byKey(const ValueKey('home-service-rows'));
+    expect(find.descendant(of: rows, matching: find.text('2 songs')), findsOneWidget);
     expect(find.text('Romantic'), findsNWidgets(2));
     // first section: above every other title on Home
     final row = tester.getTopLeft(find.byKey(const ValueKey('home-service-rows'))).dy;
@@ -219,6 +221,9 @@ void main() {
     }
     // tap: plays that playlist and opens it
     final saavnRomantic = sv.library.playlists.firstWhere((p) => p.source == 'jiosaavn:J1');
+    // 1.4.5: Liked songs + Your playlists sit above it now; scroll to it
+    await tester.ensureVisible(find.byKey(ValueKey('home-service-${saavnRomantic.id}')));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(ValueKey('home-service-${saavnRomantic.id}')));
     await tester.pump(const Duration(milliseconds: 600));
     expect(sv.player.current.value?.title, 'Pehla Nasha');

@@ -25,8 +25,20 @@ class WebProxyNet extends Net {
   final Duration offlineBackoff;
   DateTime? _offlineAt;
 
-  WebProxyNet(this.endpoint, {http.Client? client, ValueNotifier<WebProxyState>? state, this.offlineBackoff = const Duration(seconds: 20)})
-    : _c = client ?? http.Client(),
+  /// Whether the device itself has a connection (the browser's
+  /// navigator.onLine on the web). 1.4.5 QA: with the phone offline every
+  /// call failed like a missing server, so the page said the web server was
+  /// "switched off" and asked the owner to fix it; now no internet is said as
+  /// no internet and the server's state is left alone.
+  final bool Function() deviceOnline;
+
+  WebProxyNet(
+    this.endpoint, {
+    http.Client? client,
+    ValueNotifier<WebProxyState>? state,
+    this.offlineBackoff = const Duration(seconds: 20),
+    this.deviceOnline = _alwaysOnline,
+  }) : _c = client ?? http.Client(),
       state = state ?? ValueNotifier(WebProxyState.unknown);
 
   void _offline() {
@@ -37,6 +49,8 @@ class WebProxyNet extends Net {
   bool get _backingOff => state.value == WebProxyState.offline && _offlineAt != null && DateTime.now().difference(_offlineAt!) < offlineBackoff;
 
   static const offlineMessage = 'Online songs need the Byte web server switched on';
+  static const noInternetMessage = 'No internet connection';
+  static bool _alwaysOnline() => true;
 
   /// Hosts that answer web pages themselves (CORS), called directly.
   static bool direct(Uri u) {
@@ -86,7 +100,7 @@ class WebProxyNet extends Net {
       ok ? state.value = WebProxyState.online : _offline();
       return ok;
     } catch (_) {
-      _offline();
+      if (deviceOnline()) _offline();
       return false;
     }
   }
@@ -95,6 +109,7 @@ class WebProxyNet extends Net {
   Future<NetResponse> send(NetRequest r, {Duration timeout = const Duration(seconds: 20)}) async {
     final viaProxy = !direct(r.url);
     if (viaProxy && state.value == WebProxyState.unknown && _pinging != null) await _pinging;
+    if (viaProxy && !deviceOnline()) throw NetException(noInternetMessage);
     if (viaProxy && _backingOff) throw NetException(offlineMessage);
     final url = viaProxy ? proxied(r.url) : r.url;
     final headers = viaProxy
@@ -113,6 +128,7 @@ class WebProxyNet extends Net {
     } on http.ClientException catch (e) {
       // A browser reports a missing/refusing server as a bare network error.
       if (viaProxy) {
+        if (!deviceOnline()) throw NetException(noInternetMessage);
         _offline();
         throw NetException(offlineMessage);
       }

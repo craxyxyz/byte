@@ -141,7 +141,7 @@ class _SpotifyHomeRowState extends State<SpotifyHomeRow> {
     final sy = Services.i.spotifySync;
     final have = sy.imported(p);
     final n = have != null && have.items.isNotEmpty ? have.items.length : sy.countOf(p);
-    if (n >= 0) return '$n songs';
+    if (n >= 0) return songCount(n);
     return p.id == 'liked' ? 'Your likes' : 'Playlist';
   }
 }
@@ -283,7 +283,7 @@ class _OtherServiceRow extends StatelessWidget {
                   key: ValueKey('home-service-${s.name}-liked'),
                   art: const LikedArt(),
                   title: libSpec(s).likedLabel,
-                  sub: '$liked songs',
+                  sub: songCount(liked),
                   onTap: () {
                     unawaited(sv.player.playItems(sv.library.likes, from: 'Liked songs'));
                     pushPage(context, const LikedScreen());
@@ -294,7 +294,7 @@ class _OtherServiceRow extends StatelessWidget {
                   key: ValueKey('home-service-${p.id}'),
                   art: Artwork(p.artwork, size: 148, radius: 0, icon: Icons.queue_music_rounded),
                   title: p.name,
-                  sub: '${p.items.length} songs',
+                  sub: songCount(p.items.length),
                   onTap: () {
                     if (p.items.isNotEmpty) unawaited(sv.player.playItems(p.items, from: p.name));
                     pushPage(context, PlaylistScreen(id: p.id));

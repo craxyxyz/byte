@@ -1,3 +1,4 @@
+import '../../core/models.dart';
 import 'package:flutter/material.dart';
 import '../style.dart' show bottomBarSpace;
 
@@ -32,7 +33,7 @@ class PlaylistScreen extends StatelessWidget {
                       if (n != null) await lib.renamePlaylist(id, n);
                     case 'download':
                       await Services.i.downloads.downloadPlaylist(id, items);
-                      if (context.mounted) toast(context, 'Downloading ${items.length} songs');
+                      if (context.mounted) toast(context, 'Downloading ${songCount(items.length)}');
                     case 'pin':
                       final on = !lib.isPinned(id);
                       await lib.setPinned(id, on);
@@ -88,7 +89,7 @@ class PlaylistScreen extends StatelessWidget {
                           children: [
                             Text(p.name, style: t.headlineSmall, maxLines: 2, overflow: TextOverflow.ellipsis),
                             const SizedBox(height: 4),
-                            Text(total > 0 ? '${items.length} songs • ${fmtTotal(total)}' : '${items.length} songs', key: const ValueKey('list-total'), style: t.bodyMedium),
+                            Text(total > 0 ? '${songCount(items.length)} • ${fmtTotal(total)}' : songCount(items.length), key: const ValueKey('list-total'), style: t.bodyMedium),
                           ],
                         ),
                       ),
@@ -103,7 +104,12 @@ class PlaylistScreen extends StatelessWidget {
                     children: [
                       Expanded(
                         child: FilledButton.icon(
-                          onPressed: items.isEmpty ? null : () => Services.i.player.playItems(items, from: p.name),
+                          onPressed: items.isEmpty
+                              ? null
+                              : () {
+                                  Services.i.player.playItems(items, from: p.name);
+                                  Services.i.library.notePlaylistPlayed(p.id);
+                                },
                           icon: const Icon(Icons.play_arrow_rounded),
                           label: const Text('Play'),
                         ),
@@ -111,7 +117,12 @@ class PlaylistScreen extends StatelessWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: FilledButton.tonalIcon(
-                          onPressed: items.isEmpty ? null : () => Services.i.player.playItems(items, shuffle: true, from: p.name),
+                          onPressed: items.isEmpty
+                              ? null
+                              : () {
+                                  Services.i.player.playItems(items, shuffle: true, from: p.name);
+                                  Services.i.library.notePlaylistPlayed(p.id);
+                                },
                           icon: const Icon(Icons.shuffle_rounded),
                           label: const Text('Shuffle'),
                         ),
@@ -163,7 +174,10 @@ class PlaylistScreen extends StatelessWidget {
                     child: SongTile(
                       swipe: false,
                       item: items[i],
-                      onTap: () => Services.i.player.playItems(items, start: i, from: p.name),
+                      onTap: () {
+                        Services.i.player.playItems(items, start: i, from: p.name);
+                        Services.i.library.notePlaylistPlayed(p.id);
+                      },
                       trailing: ReorderableDragStartListener(
                         index: i,
                         child: const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.drag_handle_rounded)),

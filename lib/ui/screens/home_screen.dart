@@ -13,6 +13,7 @@ import '../style.dart';
 import '../widgets.dart';
 import 'explore_screen.dart';
 import '../dj_card.dart';
+import '../home_library_rows.dart';
 import '../imported_row.dart';
 import '../service_rows.dart';
 import '../../core/platform_caps.dart';
@@ -129,7 +130,10 @@ class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMi
           // the DJ is a small feature inside the app, not a tab
           actions: const [DjPill()],
           slivers: [
-            // 1.4.2: imported playlists + liked songs first (works offline too)
+            // 1.4.5: Liked songs + the playlists made in Byte, first, for every
+            // account (Byte email, music-app log-in, or signed out)
+            const SliverToBoxAdapter(child: HomeLibraryRows()),
+            // 1.4.2: imported playlists (works offline too)
             // 1.4.4: each logged-in music account's playlists ("From Spotify")
             const SliverToBoxAdapter(child: MusicServiceRows()),
             const SliverToBoxAdapter(child: ImportedRow()),

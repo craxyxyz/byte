@@ -549,7 +549,7 @@ Future<void> addToPlaylistSheet(BuildContext context, List<Item> items) async {
                 ListTile(
                   leading: Artwork(p.artwork, size: 44, icon: Icons.queue_music_rounded),
                   title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('${p.items.length} songs'),
+                  subtitle: Text(songCount(p.items.length)),
                   onTap: () async {
                     Navigator.pop(ctx);
                     final n = await s.library.addToPlaylist(p.id, items);

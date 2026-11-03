@@ -7,6 +7,7 @@ import 'ui/style.dart' show ByteScrollBehavior;
 import 'brand.dart';
 import 'services.dart';
 import 'ui/art_colors.dart';
+import 'ui/keyboard_shortcuts.dart';
 import 'ui/shell.dart';
 import 'ui/theme.dart';
 
@@ -61,6 +62,8 @@ class _ByteAppState extends State<ByteApp> {
         title: Brand.appName,
         debugShowCheckedModeBanner: false,
         scrollBehavior: const ByteScrollBehavior(),
+        shortcuts: byteShortcuts(WidgetsApp.defaultShortcuts),
+        actions: byteActions(WidgetsApp.defaultActions),
         themeMode: st.themeMode,
         theme: ByteTheme.build(Brightness.light, seed: seed, font: st.font),
         darkTheme: ByteTheme.build(Brightness.dark, seed: seed, pureBlack: st.pureBlack, font: st.font),

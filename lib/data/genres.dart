@@ -40,7 +40,9 @@ class GenreGuesser {
       final w = artists[i].$2.toDouble().clamp(1, double.infinity);
       for (final (tag, count) in results[i]) {
         final k = tag.toLowerCase().trim();
-        names[k] ??= tag[0].toUpperCase() + tag.substring(1);
+        if (k.isEmpty) continue; // 1.4.5 QA: an empty tag crashed here
+        final t = tag.trim();
+        names[k] ??= t[0].toUpperCase() + t.substring(1);
         score[k] = (score[k] ?? 0) + w * count / 100;
       }
     }

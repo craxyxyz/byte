@@ -626,13 +626,21 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final a = skipped.artists.isEmpty ? '' : skipped.artists.first.name.trim().toLowerCase();
     if (a.isEmpty) return;
     final order = queueModel.playOrder;
+    // 1.4.5 QA: the song Next is about to play stays (this runs before the
+    // queue moves), and an artist radio (nearly every song next by the same
+    // artist) is not emptied: the ranker already sinks the artist for later
+    // picks. Before, Next on "Arijit Singh Radio" wiped the list and stalled.
+    final pos = queueModel.position;
+    final drop = <int>[
+      for (var i = order.length - 1; i > pos + 1; i--)
+        if (_radioIds.contains(order[i].id) && order[i].artists.any((x) => x.name.trim().toLowerCase() == a)) i,
+    ];
+    final upcoming = order.length - pos - 1;
+    if (upcoming - drop.length < 3) return;
     var changed = false;
-    for (var i = order.length - 1; i > queueModel.position; i--) {
-      final it = order[i];
-      if (_radioIds.contains(it.id) && it.artists.any((x) => x.name.trim().toLowerCase() == a)) {
-        queueModel.removeAt(i);
-        changed = true;
-      }
+    for (final i in drop) {
+      queueModel.removeAt(i);
+      changed = true;
     }
     if (changed) {
       _preparedOnIdle = null;
@@ -1287,6 +1295,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     if (!mediaId.startsWith('item:')) return;
     final rest = mediaId.substring(5);
     final cut = rest.lastIndexOf(':');
+    if (cut <= 0) return; // 1.4.5 QA: a malformed id from the car no longer throws
     final folder = rest.substring(0, cut), id = rest.substring(cut + 1);
     final list = _carList(folder);
     final at = list.indexWhere((i) => i.id == id);

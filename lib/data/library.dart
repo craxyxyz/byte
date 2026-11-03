@@ -229,6 +229,34 @@ class Library extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── recently used playlists (1.4.5: Home → "Your playlists") ──
+  /// When each playlist was last played from Home or its own page (ms).
+  Map<String, int> get playlistPlayed {
+    final m = _misc.get('playlist_played');
+    if (m is! Map) return const {};
+    return {for (final e in m.entries) if (e.value is int) '${e.key}': e.value as int};
+  }
+
+  Future<void> notePlaylistPlayed(String id, {int? at}) async {
+    final m = {...playlistPlayed, id: at ?? DateTime.now().millisecondsSinceEpoch};
+    // keep it small: the 200 most recent
+    if (m.length > 200) {
+      final keep = (m.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(200);
+      m
+        ..clear()
+        ..addEntries(keep);
+    }
+    await _misc.put('playlist_played', m);
+    notifyListeners();
+  }
+
+  /// Most recent of "edited" and "played", for sorting.
+  int playlistRecency(LocalPlaylist p, [Map<String, int>? played]) {
+    final pl = (played ?? playlistPlayed)[p.id] ?? 0;
+    final ed = p.updated.millisecondsSinceEpoch;
+    return pl > ed ? pl : ed;
+  }
+
   // ── history ──
   List<HistoryEntry> get history {
     final l = _history.values.map((v) => jsonDecode(v as String) as Map).toList()..sort((a, b) => (b['at'] as int).compareTo(a['at'] as int));

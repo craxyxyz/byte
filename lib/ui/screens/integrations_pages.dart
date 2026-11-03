@@ -510,7 +510,7 @@ class _SpotifyAccountScreenState extends State<SpotifyAccountScreen> {
                                       )
                                     : Artwork(p.cover, size: 40, radius: 6),
                                 title: p.name,
-                                subtitle: [if (Services.i.spotifySync.countOf(p) >= 0) '${Services.i.spotifySync.countOf(p)} songs', if (p.owner.isNotEmpty) p.owner].join(' · '),
+                                subtitle: [if (Services.i.spotifySync.countOf(p) >= 0) songCount(Services.i.spotifySync.countOf(p)), if (p.owner.isNotEmpty) p.owner].join(' · '),
                                 value: (p.id == 'liked' ? Services.i.spotifySync.likedImported : Services.i.spotifySync.imported(p) != null) ? 'Open' : 'Import',
                                 onTap: () => (p.id == 'liked' ? Services.i.spotifySync.likedImported : Services.i.spotifySync.imported(p) != null) ? openSpotifyPlaylist(context, p) : _import(p),
                               ),
