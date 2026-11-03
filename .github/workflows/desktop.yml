@@ -8,6 +8,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the GitHub Release v<version> (otherwise a pre-release called pipeline-test)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -222,9 +227,10 @@ jobs:
       - run: ls -la dist && (cd dist && sha256sum * | tee SHA256SUMS.txt)
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.BYTE_VERSION }}
+          tag_name: ${{ inputs.publish && format('v{0}', env.BYTE_VERSION) || 'pipeline-test' }}
           target_commitish: ${{ github.sha }}
-          name: Byte ${{ env.BYTE_VERSION }}
+          name: ${{ inputs.publish && format('Byte {0}', env.BYTE_VERSION) || 'pipeline-test (not a release)' }}
+          prerelease: ${{ !inputs.publish }}
           body: |
             Byte ${{ env.BYTE_VERSION }} for Windows, macOS, Linux and iPhone (unsigned).
             Windows: run Byte-Setup, or unzip and open Byte.exe. If SmartScreen appears: More info → Run anyway.
@@ -233,7 +239,7 @@ jobs:
             © 2026 Apurba Laskar
           files: dist/*
           fail_on_unmatched_files: false
-          make_latest: true
+          make_latest: ${{ inputs.publish && 'true' || 'false' }}
       - name: Hand the files to Byte's build helper (encrypted)
         env:
           DIST_KEY: ${{ secrets.DIST_KEY }}
@@ -242,5 +248,5 @@ jobs:
           tar -cf handoff.tar -C dist .
           openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:DIST_KEY -in handoff.tar -out handoff.bin
           ls -la handoff.bin
-          URL=$(curl -fsS --retry 3 -F reqtype=fileupload -F time=24h -F fileToUpload=@handoff.bin https://litterbox.catbox.moe/resources/internals/api.php)
+          URL=$(curl -fsS --retry 3 -F reqtype=fileupload -F time=1h -F fileToUpload=@handoff.bin https://litterbox.catbox.moe/resources/internals/api.php)
           echo "::notice title=handoff::$URL $(sha256sum handoff.bin | cut -c1-64)"
