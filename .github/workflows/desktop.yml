@@ -18,6 +18,10 @@ on:
         description: "Platforms to build: all, or any of windows linux apple"
         type: string
         default: all
+      mac_runner:
+        description: "Runner for the macOS + iPhone job (macos-latest is arm64; Intel when arm64 runners are short)"
+        type: string
+        default: macos-15-intel
 
 permissions:
   contents: write
@@ -160,7 +164,10 @@ jobs:
 
   apple:
     if: ${{ !inputs.only || inputs.only == 'all' || contains(inputs.only, 'apple') }}
-    runs-on: macos-latest
+    # macOS arm64 runners were short (jobs not picked up for 15 min, then
+    # cancelled, 2026-11-03), so the Intel runner is the default; Xcode builds
+    # the same universal Byte.app and arm64 iPhone app there.
+    runs-on: ${{ inputs.mac_runner || 'macos-15-intel' }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -184,6 +191,8 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' $APP/Contents/Info.plist | grep -qx "$BYTE_VERSION"
           file $APP/Contents/MacOS/Byte
           lipo -info $APP/Contents/MacOS/Byte
+          lipo -info $APP/Contents/MacOS/Byte | grep -q arm64
+          lipo -info $APP/Contents/MacOS/Byte | grep -q x86_64
           codesign -dv --entitlements - $APP 2>&1 | head -40 || true
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent $APP dist/Byte-v$BYTE_VERSION-macos.zip
