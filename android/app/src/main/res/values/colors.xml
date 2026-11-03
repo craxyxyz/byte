@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Byte brand red (from the logo) -->
+    <color name="byte_splash">#F5214F</color>
+</resources>

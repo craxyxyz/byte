@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="byte_widget_glass_top">#E6FFFFFF</color>
+    <color name="byte_widget_glass_bottom">#B8F4F4F7</color>
+    <color name="byte_widget_edge">#FFFFFFFF</color>
+    <color name="byte_widget_text">#FF111114</color>
+    <color name="byte_widget_text_dim">#99111114</color>
+</resources>

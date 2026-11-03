@@ -1,0 +1,17 @@
+# © 2026 Apurba Laskar
+name: byte_desktop_audio
+description: "Byte's audio player backend for Windows and Linux (just_audio on media_kit)."
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.5.0
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  just_audio_platform_interface: ^4.6.0
+  media_kit: ^1.2.6
+  media_kit_libs_windows_audio: ^1.0.9
+  media_kit_libs_linux: ^1.2.1
