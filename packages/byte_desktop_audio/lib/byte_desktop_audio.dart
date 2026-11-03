@@ -39,6 +39,31 @@ class ByteDesktopAudio extends JustAudioPlatform {
   /// Flutter's own plugin registration (Windows/Linux).
   static void registerWith() => register();
 
+  // ── 1.4.5: the Audio Lab on a computer ──
+  /// The filter chain every song runs through (the app builds it from the
+  /// Audio Lab: equalizer, balance, mono, loudness, reverb, crossfeed).
+  /// '' = untouched sound.
+  static String effects = '';
+  static final Set<_DesktopPlayer> _live = {};
+
+  /// The filters the first live player really runs, as the player reports
+  /// them (live tests).
+  @visibleForTesting
+  static Future<String?> debugAf() async {
+    final p = _live.isEmpty ? null : _live.first._p;
+    if (p == null) return null;
+    return (p.platform as dynamic).getProperty('af') as Future<String>;
+  }
+
+  /// Use [chain] on every player now and on each new one.
+  static Future<void> setEffects(String chain) async {
+    if (chain == effects) return;
+    effects = chain;
+    for (final p in _live.toList()) {
+      await p._applyAf(force: true);
+    }
+  }
+
   final Map<String, _DesktopPlayer> _players = {};
 
   @override
@@ -102,6 +127,8 @@ class _DesktopPlayer extends AudioPlayerPlatform {
       // Tests on machines without a sound card: BYTE_MPV_AO=null.
       final ao = Platform.environment['BYTE_MPV_AO'];
       if (ao != null && ao.isNotEmpty) unawaited((_p!.platform as dynamic).setProperty('ao', ao) as Future<void>);
+      ByteDesktopAudio._live.add(this);
+      unawaited(_applyAf());
       final s = _p!.stream;
       _subs.addAll([
         s.playing.listen((_) {
@@ -292,7 +319,11 @@ class _DesktopPlayer extends AudioPlayerPlatform {
 
   @override
   Future<SetSpeedResponse> setSpeed(SetSpeedRequest request) async {
-    if (request.speed > 0) await _p?.setRate(request.speed);
+    if (request.speed > 0) {
+      await _p?.setRate(request.speed);
+      _tempo = true;
+      await _applyAf(force: true); // the player rewrote its filters
+    }
     return SetSpeedResponse();
   }
 
@@ -301,9 +332,36 @@ class _DesktopPlayer extends AudioPlayerPlatform {
     if (request.pitch > 0) {
       try {
         await _p?.setPitch(request.pitch);
+        _tempo = true;
+        await _applyAf(force: true);
       } catch (_) {}
     }
     return SetPitchResponse();
+  }
+
+  /// Speed / pitch were set (the player then keeps its own tempo filter).
+  bool _tempo = false;
+  String? _af;
+
+  /// This player's filters: its tempo filter (speed / pitch), then the
+  /// Audio Lab chain. A chain the player refuses leaves the old one playing.
+  Future<void> _applyAf({bool force = false}) async {
+    final p = _p;
+    if (p == null) return;
+    final st = p.state;
+    final fx = ByteDesktopAudio.effects;
+    final af = [
+      if (_tempo) 'scaletempo:scale=${(st.rate / (st.pitch <= 0 ? 1 : st.pitch)).toStringAsFixed(8)}',
+      if (fx.isNotEmpty) 'lavfi=[$fx]',
+    ].join(',');
+    if (!force && af == _af) return;
+    if (af.isEmpty && _af == null) return; // nothing set yet, nothing to clear
+    _af = af;
+    try {
+      await (p.platform as dynamic).setProperty('af', af);
+    } catch (e) {
+      debugPrint('desktop audio filters: $e');
+    }
   }
 
   @override
@@ -375,6 +433,7 @@ class _DesktopPlayer extends AudioPlayerPlatform {
   }
 
   Future<void> release() async {
+    ByteDesktopAudio._live.remove(this);
     for (final s in _subs) {
       await s.cancel();
     }

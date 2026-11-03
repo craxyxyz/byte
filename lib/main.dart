@@ -34,6 +34,7 @@ import 'player/equalizer.dart';
 import 'services.dart';
 import 'player/audio_route.dart' show AudioRoute;
 import 'audiolab/audio_lab.dart';
+import 'audiolab/desktop_sound_backend.dart';
 import 'player/crossfade.dart' show CrossfadePlan;
 import 'data/spotify_account.dart';
 import 'ui/web_logins.dart';
@@ -73,6 +74,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Windows/Linux: songs play through Byte's desktop audio backend.
   ByteDesktopAudio.register();
+  // 1.4.5: and the Audio Lab through the computer player's filters.
+  DesktopSoundBackend.register();
   if (kReleaseMode) debugPrint = (String? message, {int? wrapWidth}) {};
   // 1.4.5: uncaught errors go to a small log on the phone (About → Report a problem).
   String? logDir;
