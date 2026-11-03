@@ -20,6 +20,13 @@ class Settings extends ChangeNotifier {
       }
       await _b?.put('qBest13', true);
     }
+    // 1.4.4 (Apurba): lyrics in another script open Romanized by default.
+    // 1.4.3's automatic dual look was never his pick, so any look saved
+    // without the "picked by hand" mark is dropped once; a hand pick stays.
+    if (_b?.get('lyrLook144') != true) {
+      if (_b?.get('lyricsLookManual') != true) await _b?.delete('lyricsLook');
+      await _b?.put('lyrLook144', true);
+    }
   }
 
   T _get<T>(String k, T def) {
@@ -111,6 +118,27 @@ class Settings extends ChangeNotifier {
   /// under the cover: 'hindi' (Devanagari letters, same words — the default),
   /// 'latin' (Roman letters) or 'original' (the song's own script).
   String get lyricsScript => _get('lyricsScript', 'latin');
+
+  /// 1.4.4: the look picked by hand on the lyrics screen for lyrics in another
+  /// script ('romanized', 'dual' = Both, 'original' = Song's own, 'hindi'),
+  /// or null = the default, Romanized. Only a hand pick (lyricsLookManual)
+  /// is ever returned; null clears it.
+  String? get lyricsLook {
+    if (_b?.get('lyricsLookManual') != true) return null;
+    final v = _b?.get('lyricsLook');
+    return v is String && const {'romanized', 'dual', 'original', 'hindi'}.contains(v) ? v : null;
+  }
+
+  set lyricsLook(String? v) {
+    final ok = v != null && const {'romanized', 'dual', 'original', 'hindi'}.contains(v);
+    if (ok) {
+      _b?.put('lyricsLook', v);
+    } else {
+      _b?.delete('lyricsLook');
+    }
+    _b?.put('lyricsLookManual', ok);
+    notifyListeners();
+  }
   set lyricsScript(String v) => _set('lyricsScript', const {'hindi', 'latin', 'original'}.contains(v) ? v : 'latin');
 
   /// Lyrics timing nudge for every song, in ms (+ = lyrics earlier).

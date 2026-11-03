@@ -13,6 +13,7 @@ import '../cast/cast_controller.dart';
 import '../core/models.dart';
 import '../core/platform_caps.dart';
 import '../data/audio_format.dart';
+import '../lyrics/dual.dart' show lyricsNeedDual;
 import '../lyrics/lrc.dart';
 import 'lyrics_view.dart' show lyricsNowMs, lyricsInLook, defaultLookFor, LyricsLook, LyricsPane, playingDurationSec;
 import '../player/audio_route.dart';
@@ -563,7 +564,7 @@ class _NextLyricLineState extends State<NextLyricLine> with SingleTickerProvider
     if (!mounted || _for?.id != it.id) return;
     // the letters the person picked, same words; lyrics in another script
     // (Urdu, Hindi, Bengali…) show their Roman letters here (1.4.3)
-    final look = l.kind == LyricsKind.synced ? defaultLookFor(l, Services.i.settings.lyricsScript) : LyricsLook.original;
+    final look = l.kind == LyricsKind.synced ? defaultLookFor(l, Services.i.settings.lyricsScript, picked: Services.i.settings.lyricsLook) : LyricsLook.original;
     final shown = l.kind == LyricsKind.synced ? lyricsInLook(l, look) : l;
     setState(() {
       _clock = shown.kind == LyricsKind.synced && shown.lines.isNotEmpty
@@ -573,7 +574,7 @@ class _NextLyricLineState extends State<NextLyricLine> with SingleTickerProvider
     });
     _tick();
     if (_clock != null && !_ticker.isActive) _ticker.start();
-    if (look == LyricsLook.dual) {
+    if (look == LyricsLook.dual || (look == LyricsLook.romanized && lyricsNeedDual(l))) {
       // the spelling from a Roman-letter version of the song, when one matches
       try {
         final d = await Services.i.lyrics.dualFor(it, l).timeout(const Duration(seconds: 20));

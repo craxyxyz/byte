@@ -66,12 +66,17 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
   // Lyrics: after a few seconds without a touch, go full screen.
   Timer? _idleTimer;
+
+  /// 1.4.4: the lyrics are on screen: the lyrics mode on a phone, or the
+  /// Lyrics side of the wide (tablet / web / desktop) player.
+  bool _wideNow = false;
+  bool get _lyricsOnScreen => mode == PlayerMode.lyrics || (_wideNow && sideTab == NpTab.lyrics);
   void _poke() {
     _idleTimer?.cancel();
     if (LyricsPane.idle.value) LyricsPane.idle.value = false;
-    if (mode != PlayerMode.lyrics || !Services.i.settings.lyricsAutoFullScreen) return;
+    if (!_lyricsOnScreen || !Services.i.settings.lyricsAutoFullScreen) return;
     _idleTimer = Timer(LyricsPane.idleAfter, () {
-      if (!mounted || mode != PlayerMode.lyrics || LyricsPane.selection.value != null) return;
+      if (!mounted || !_lyricsOnScreen || LyricsPane.selection.value != null) return;
       LyricsPane.idle.value = true;
     });
   }
@@ -112,6 +117,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 820;
+    if (wide != _wideNow) {
+      _wideNow = wide;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _poke();
+      });
+    }
     return Theme(
       data: ByteTheme.player(Theme.of(context)),
       child: Scaffold(
@@ -303,51 +314,89 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   }
 
   Widget _wide(BuildContext context, Item it) {
+    // 1.4.4 (Apurba): full-screen lyrics here too: after a few seconds
+    // without a touch on the Lyrics side, the cover, controls and the
+    // Lyrics | Up next switch fold away and only the lyrics stay (centred);
+    // a touch brings everything back.
     return Column(
       children: [
         _grabber(context),
         Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                flex: 5,
-                child: Column(
+          child: ValueListenableBuilder<bool>(
+            valueListenable: LyricsPane.idle,
+            builder: (context, idle0, _) {
+              final full = idle0 && sideTab == NpTab.lyrics;
+              return LayoutBuilder(
+                builder: (context, c) => Row(
                   children: [
-                    Expanded(child: _SongArt(item: it)),
-                    _PlayerControls(
-                      item: it,
-                      mode: PlayerMode.song,
-                      sideMode: sideTab == NpTab.lyrics ? PlayerMode.lyrics : PlayerMode.queue,
-                      onMode: (m) {
-                        if (m != PlayerMode.song) setState(() => sideTab = m == PlayerMode.lyrics ? NpTab.lyrics : NpTab.queue);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                flex: 6,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, bottom: 4),
-                      child: _Segments(value: sideTab, options: const [NpTab.lyrics, NpTab.queue], onChanged: (t) => setState(() => sideTab = t)),
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 320),
+                      curve: Curves.easeOutCubic,
+                      child: full
+                          ? const SizedBox(width: 0, height: double.infinity)
+                          : SizedBox(
+                              width: c.maxWidth * 5 / 11,
+                              child: Column(
+                                children: [
+                                  Expanded(child: _SongArt(item: it)),
+                                  _PlayerControls(
+                                    item: it,
+                                    mode: PlayerMode.song,
+                                    sideMode: sideTab == NpTab.lyrics ? PlayerMode.lyrics : PlayerMode.queue,
+                                    onMode: (m) {
+                                      if (m != PlayerMode.song) setState(() => sideTab = m == PlayerMode.lyrics ? NpTab.lyrics : NpTab.queue);
+                                      _poke();
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
                     ),
                     Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 300),
-                        child: sideTab == NpTab.lyrics ? const _LyricsArea(key: ValueKey('l')) : const _QueuePage(key: ValueKey('q')),
+                      child: Column(
+                        children: [
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 320),
+                            curve: Curves.easeOutCubic,
+                            child: full
+                                ? const SizedBox(width: double.infinity)
+                                : Padding(
+                                    padding: const EdgeInsets.only(top: 4, bottom: 4),
+                                    child: _Segments(
+                                      value: sideTab,
+                                      options: const [NpTab.lyrics, NpTab.queue],
+                                      onChanged: (t) {
+                                        setState(() => sideTab = t);
+                                        _poke();
+                                      },
+                                    ),
+                                  ),
+                          ),
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(maxWidth: full ? 880 : double.infinity),
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 300),
+                                  child: sideTab == NpTab.lyrics ? const _LyricsArea(key: ValueKey('l')) : const _QueuePage(key: ValueKey('q')),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
+              );
+            },
           ),
         ),
       ],
     );
   }
+
 }
 
 /// Lyrics fill the space; while scrolling them a "back to the live line" button shows.

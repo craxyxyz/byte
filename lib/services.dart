@@ -66,14 +66,14 @@ class Services {
   late final Scrobbler scrobbler = Scrobbler(net);
 
   /// Your own Spotify login (your developer app's Client ID).
-  late final SpotifyAccount spotify = SpotifyAccount(net);
+  late SpotifyAccount spotify = SpotifyAccount(net);
 
   /// Settings → Audio Lab (equalizer, effects, transitions).
   final AudioLab lab = AudioLab();
   AudioLabEngine? labEngine;
 
   /// Keeps the connected account's Liked Songs and playlists in Byte.
-  late final SpotifySync spotifySync = SpotifySync(
+  late SpotifySync spotifySync = SpotifySync(
     account: spotify,
     library: library,
     matcher: (tracks, onProgress) async {

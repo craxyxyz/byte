@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'sync_help.dart';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -273,6 +274,14 @@ class MusicAppAccountScreen extends StatelessWidget {
                       enabled: !busy,
                       onTap: () => openMusicAppLogin(context, service, syncOnly: true),
                     ),
+                    if (service != LibService.youtubeMusic)
+                      GroupRow(
+                        key: const ValueKey('music-app-sync-help'),
+                        icon: Icons.info_outline_rounded,
+                        title: 'How sync works',
+                        chevron: true,
+                        onTap: () => showSyncHelp(context, service: spec.name, automatic: service == LibService.spotify && Services.i.spotify.connected),
+                      ),
                     GroupRow(
                       key: const ValueKey('music-app-logout'),
                       icon: Icons.logout_rounded,

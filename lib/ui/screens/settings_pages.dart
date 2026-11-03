@@ -985,6 +985,7 @@ class AppearanceScreen extends StatelessWidget {
                   final v = await pick('Show lyrics in', const {'latin': 'English letters: Tujhe dekha to (a–z)', 'hindi': 'हिंदी — Hindi letters, same words', 'original': 'The song\'s own script'}, st.lyricsScript);
                   if (v != null) {
                     st.lyricsScript = v;
+                    st.lyricsLook = null; // 1.4.4: the letters picked here win over an earlier pick on the lyrics screen
                     LyricsPane.reload.value++;
                   }
                 },

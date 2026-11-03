@@ -75,7 +75,7 @@ void main() {
       final st = (await makeServices()).settings;
       expect(st.lyricsScript, 'latin');
       final hi = Lyrics.synced(const [LyricLine(0, 'तुम ही हो')], 'x');
-      expect(defaultLookFor(hi, 'latin'), LyricsLook.dual); // 1.4.3: Roman beside the original
+      expect(defaultLookFor(hi, 'latin'), LyricsLook.romanized); // 1.4.4: Roman letters only (1.4.3 had both)
       expect(lyricsInLook(hi, LyricsLook.romanized).lines.first.text, 'Tum hi ho');
       final w = Lyrics.synced(const [LyricLine(0, 'तुम ही हो', [LyricWord('तुम ', 0, 300), LyricWord('ही ', 300, 600), LyricWord('हो', 600, 900)])], 'x');
       final r = romanizeLyrics(w);
@@ -92,7 +92,7 @@ void main() {
       expect(defaultLookFor(ml, 'hindi'), LyricsLook.hindi);
       expect(defaultLookFor(hi, 'hindi'), LyricsLook.original);
       expect(defaultLookFor(en, 'hindi'), LyricsLook.original);
-      expect(defaultLookFor(ml, 'latin'), LyricsLook.dual); // 1.4.3
+      expect(defaultLookFor(ml, 'latin'), LyricsLook.romanized); // 1.4.4
       expect(defaultLookFor(ml, 'original'), LyricsLook.original);
     });
     test('Hindi letters keep every line\'s and word\'s timing', () {

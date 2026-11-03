@@ -39,6 +39,14 @@ class SpotifyWebApi {
   static const v1 = 'https://api.spotify.com/v1';
   static const desktopUa = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
+  /// 1.4.4: the library service refuses ("403 Client/request not allowed")
+  /// any question that doesn't come with a browser's User-Agent. Byte's own
+  /// network client sends its default one, so every library question failed
+  /// and Byte fell back to the older public API, which answers the web
+  /// player's sign-in with "429 rate limit" — that was "Couldn't sync".
+  /// Every question now goes out the way the web player's own page sends it.
+  static const pageHeaders = {'User-Agent': desktopUa, 'Origin': 'https://open.spotify.com', 'Referer': 'https://open.spotify.com/'};
+
   /// The web player's own question ids (read from its script at run time;
   /// these are the ones seen on 2 Nov 2026, used if that read fails).
   static const fallbackHashes = {
@@ -84,14 +92,14 @@ class SpotifyWebApi {
       },
     });
     NetResponse r;
-    for (var attempt = 0;; attempt++) {
+    for (var attempt = 0; ; attempt++) {
       r = await net.send(
-        NetRequest('POST', Uri.parse(pathfinder), headers: {
-          'Authorization': 'Bearer $tok',
-          'Content-Type': 'application/json;charset=UTF-8',
-          'app-platform': 'WebPlayer',
-          'Accept': 'application/json',
-        }, body: utf8.encode(body)),
+        NetRequest(
+          'POST',
+          Uri.parse(pathfinder),
+          headers: {...pageHeaders, 'Authorization': 'Bearer $tok', 'Content-Type': 'application/json;charset=UTF-8', 'app-platform': 'WebPlayer', 'Accept': 'application/json'},
+          body: utf8.encode(body),
+        ),
       );
       if ((r.status == 429 || r.status >= 500) && attempt < 3) {
         await Future<void>.delayed(Duration(seconds: attempt + 1));
@@ -118,8 +126,18 @@ class SpotifyWebApi {
   Future<Map> _v1(String url) async {
     final tok = await token();
     for (var attempt = 0; attempt < 4; attempt++) {
-      final r = await net.get(Uri.parse(url), headers: {'Authorization': 'Bearer $tok'});
-      if (r.ok) return r.json as Map;
+      final r = await net.get(Uri.parse(url), headers: {...pageHeaders, 'Authorization': 'Bearer $tok', 'Accept': 'application/json'});
+      if (r.ok) {
+        final j = (() {
+          try {
+            return r.json;
+          } catch (_) {
+            return null;
+          }
+        })();
+        if (j is Map) return j;
+        throw const SpotifyWebProblem('The music service sent an answer Byte couldn\'t read');
+      }
       if (r.status == 401) throw const SpotifyWebProblem('Signed out. Tap to connect again.', signedOut: true);
       if (r.status == 429 || r.status >= 500) {
         await Future<void>.delayed(Duration(seconds: attempt + 1));
@@ -167,11 +185,7 @@ class SpotifyWebApi {
     if (d['__typename'] != null && d['__typename'] != 'Track') return null;
     final name = d['name'];
     if (name == null || '$name'.isEmpty) return null;
-    final artists = (((d['artists'] as Map?)?['items'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((a) => (a['profile'] as Map?)?['name'])
-        .whereType<Object>()
-        .join(', ');
+    final artists = (((d['artists'] as Map?)?['items'] as List?) ?? const []).whereType<Map>().map((a) => (a['profile'] as Map?)?['name']).whereType<Object>().join(', ');
     final album = (d['albumOfTrack'] as Map?)?['name'];
     final dur = ((d['duration'] ?? d['trackDuration']) as Map?)?['totalMilliseconds'];
     return ExtTrack('$name', artists, album: album == null ? null : '$album', durationMs: (dur as num?)?.toInt());
@@ -211,7 +225,7 @@ class SpotifyWebApi {
     while (next != null) {
       final j = await _v1(next);
       for (final it in ((j['items'] as List?) ?? const []).whereType<Map>()) {
-        final t = _v1Track(it['track'] as Map?);
+        final t = _v1Track((it['track'] ?? it['item']) as Map?);
         if (t != null) out.add(t);
       }
       onProgress?.call(out.length, (j['total'] as num?)?.toInt() ?? out.length);
@@ -264,7 +278,15 @@ class SpotifyWebApi {
       for (final p in ((j['items'] as List?) ?? const []).whereType<Map>()) {
         final imgs = (p['images'] as List?) ?? const [];
         final tracks = (p['tracks'] ?? p['items']) as Map?;
-        out.add(WebPlaylist('spotify:playlist:${p['id']}', '${p['name']}', imgs.isEmpty ? null : (imgs.first as Map)['url'] as String?, (tracks?['total'] as num?)?.toInt() ?? -1, '${(p['owner'] as Map?)?['display_name'] ?? ''}'));
+        out.add(
+          WebPlaylist(
+            'spotify:playlist:${p['id']}',
+            '${p['name']}',
+            imgs.isEmpty ? null : (imgs.first as Map)['url'] as String?,
+            (tracks?['total'] as num?)?.toInt() ?? -1,
+            '${(p['owner'] as Map?)?['display_name'] ?? ''}',
+          ),
+        );
       }
       next = j['next'] as String?;
     }
@@ -297,8 +319,18 @@ class SpotifyWebApi {
     }
     final id = uri.split(':').last;
     String? next = '$v1/playlists/$id/tracks?limit=100';
+    var usedItems = false;
     while (next != null) {
-      final j = await _v1(next);
+      Map j;
+      try {
+        j = await _v1(next);
+      } on SpotifyWebProblem catch (e) {
+        // newer name of the same list
+        if (e.signedOut || usedItems || out.isNotEmpty) rethrow;
+        usedItems = true;
+        next = '$v1/playlists/$id/items?limit=100';
+        continue;
+      }
       for (final it in ((j['items'] as List?) ?? const []).whereType<Map>()) {
         final t = _v1Track((it['track'] ?? it['item']) as Map?);
         if (t != null) out.add(t);

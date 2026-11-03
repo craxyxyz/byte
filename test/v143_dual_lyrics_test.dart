@@ -65,15 +65,16 @@ void main() {
       expect(needsDualText('Tum hi ho, ab tum hi ho'), isFalse);
       expect(needsDualText('Baby I love you'), isFalse);
     });
-    test('dual is the default look for them; English stays single', () {
+    test('1.4.4: Romanized is the default look for them (Both is a pick); English stays single', () {
       final ur = _synced('jo_tu_na_mila_ur.lrc');
       final en = Lyrics.synced(const [LyricLine(0, 'Hello there'), LyricLine(2000, 'General Kenobi')], 'x');
       final romanHindi = _synced('tum_hi_ho_roman.lrc');
-      expect(defaultLookFor(ur, 'latin'), LyricsLook.dual);
-      expect(defaultLookFor(ur, 'hindi'), LyricsLook.dual); // Urdu: no Hindi-letter look, Roman beside it
+      expect(defaultLookFor(ur, 'latin'), LyricsLook.romanized);
+      expect(defaultLookFor(ur, 'latin', picked: 'dual'), LyricsLook.dual);
+      expect(defaultLookFor(ur, 'hindi'), LyricsLook.romanized); // Urdu: no Hindi-letter look, Roman letters
       expect(defaultLookFor(ur, 'original'), LyricsLook.original); // the person can still pick
-      expect(defaultLookFor(_synced('295_pa.lrc'), 'latin'), LyricsLook.dual);
-      expect(defaultLookFor(_synced('bojhena_bn.lrc'), 'latin'), LyricsLook.dual);
+      expect(defaultLookFor(_synced('295_pa.lrc'), 'latin'), LyricsLook.romanized);
+      expect(defaultLookFor(_synced('bojhena_bn.lrc'), 'latin'), LyricsLook.romanized);
       expect(defaultLookFor(en, 'latin'), LyricsLook.original);
       expect(defaultLookFor(romanHindi, 'latin'), LyricsLook.original);
     });

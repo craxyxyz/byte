@@ -14,6 +14,7 @@ import '../widgets.dart';
 import 'explore_screen.dart';
 import '../dj_card.dart';
 import '../imported_row.dart';
+import '../service_rows.dart';
 import '../../core/platform_caps.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -129,6 +130,8 @@ class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMi
           actions: const [DjPill()],
           slivers: [
             // 1.4.2: imported playlists + liked songs first (works offline too)
+            // 1.4.4: each logged-in music account's playlists ("From Spotify")
+            const SliverToBoxAdapter(child: MusicServiceRows()),
             const SliverToBoxAdapter(child: ImportedRow()),
             if (failed)
               SliverToBoxAdapter(

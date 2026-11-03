@@ -13,6 +13,8 @@ import '../nav.dart';
 import '../page.dart';
 import '../style.dart';
 import '../import_sheet.dart';
+import '../service_rows.dart' show openSpotifyPlaylist;
+import '../sync_help.dart';
 import '../widgets.dart';
 
 Widget _foot(BuildContext context, String text) => Padding(
@@ -405,7 +407,7 @@ class _SpotifyAccountScreenState extends State<SpotifyAccountScreen> {
     super.initState();
     final sp = Services.i.spotify;
     client.text = sp.clientId.isNotEmpty ? sp.clientId : (SpotifyAccount.hasBuiltIn ? SpotifyAccount.builtInClientId : '');
-    if (sp.connected) _lists = sp.playlists();
+    if (sp.connected) _lists = Services.i.spotifySync.refreshLists();
   }
 
   @override
@@ -421,7 +423,7 @@ class _SpotifyAccountScreenState extends State<SpotifyAccountScreen> {
       return;
     }
     final ok = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => SpotifyLoginPage(clientId: id)));
-    if (ok == true && mounted) setState(() => _lists = Services.i.spotify.playlists());
+    if (ok == true && mounted) setState(() => _lists = Services.i.spotifySync.refreshLists());
   }
 
   void _import(SpotifyPlaylistInfo p) => pushPage(context, ImportScreen(preset: (onStatus) => Services.i.spotify.read(p, onStatus: onStatus)));
@@ -460,6 +462,13 @@ class _SpotifyAccountScreenState extends State<SpotifyAccountScreen> {
                           trailing: ByteSwitch(value: Services.i.spotifySync.auto, onChanged: Services.i.spotifySync.setAuto),
                         ),
                         GroupRow(
+                          key: const ValueKey('spotify-sync-help'),
+                          icon: Icons.info_outline_rounded,
+                          title: 'How sync works',
+                          chevron: true,
+                          onTap: () => showSyncHelp(context, service: 'Spotify', automatic: true),
+                        ),
+                        GroupRow(
                           icon: Icons.logout_rounded,
                           title: 'Log out of Spotify',
                           subtitle: 'So someone else can sign in on this device. Songs already in Byte stay.',
@@ -478,13 +487,13 @@ class _SpotifyAccountScreenState extends State<SpotifyAccountScreen> {
                       future: _lists,
                       builder: (context, snap) {
                         if (snap.connectionState != ConnectionState.done) return const LoadingList(rows: 5);
-                        if (snap.hasError) {
+                        final ls = snap.hasError ? Services.i.spotifySync.lists : snap.data!;
+                        if (ls.isEmpty) {
                           return ErrorRetry(
                             snap.error is SpotifyProblem ? (snap.error as SpotifyProblem).message : 'Couldn\'t load your Spotify playlists',
-                            onRetry: () => setState(() => _lists = sp.playlists()),
+                            onRetry: () => setState(() => _lists = Services.i.spotifySync.refreshLists()),
                           );
                         }
-                        final ls = snap.data!;
                         return GroupCard(
                           children: [
                             for (final p in ls)
@@ -501,9 +510,9 @@ class _SpotifyAccountScreenState extends State<SpotifyAccountScreen> {
                                       )
                                     : Artwork(p.cover, size: 40, radius: 6),
                                 title: p.name,
-                                subtitle: [if (p.count >= 0) '${p.count} songs', if (p.owner.isNotEmpty) p.owner].join(' · '),
-                                value: 'Import',
-                                onTap: () => _import(p),
+                                subtitle: [if (Services.i.spotifySync.countOf(p) >= 0) '${Services.i.spotifySync.countOf(p)} songs', if (p.owner.isNotEmpty) p.owner].join(' · '),
+                                value: (p.id == 'liked' ? Services.i.spotifySync.likedImported : Services.i.spotifySync.imported(p) != null) ? 'Open' : 'Import',
+                                onTap: () => (p.id == 'liked' ? Services.i.spotifySync.likedImported : Services.i.spotifySync.imported(p) != null) ? openSpotifyPlaylist(context, p) : _import(p),
                               ),
                           ],
                         );
@@ -532,7 +541,7 @@ class _SpotifyAccountScreenState extends State<SpotifyAccountScreen> {
                           key: const ValueKey('spotify-web-signin'),
                           child: _Button('Sign in with Spotify', () async {
                             final ok = await Navigator.of(context, rootNavigator: true).push<bool>(MaterialPageRoute(builder: (_) => const SpotifyWebLoginPage()));
-                            if (ok == true && mounted) setState(() => _lists = Services.i.spotify.playlists());
+                            if (ok == true && mounted) setState(() => _lists = Services.i.spotifySync.refreshLists());
                           }),
                         ),
                       ],
@@ -551,7 +560,7 @@ class _SpotifyAccountScreenState extends State<SpotifyAccountScreen> {
                             final v = await promptText(context, title: 'sp_dc cookie', hint: 'Paste the value', action: 'Connect');
                             if (v == null || !context.mounted) return;
                             final ok = await connectSpotifyWithCookie(context, v);
-                            if (ok && mounted) setState(() => _lists = Services.i.spotify.playlists());
+                            if (ok && mounted) setState(() => _lists = Services.i.spotifySync.refreshLists());
                           },
                         ),
                       ],

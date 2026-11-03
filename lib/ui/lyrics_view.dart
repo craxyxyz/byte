@@ -54,6 +54,27 @@ class LyricsPane extends StatefulWidget {
   State<LyricsPane> createState() => _LyricsPaneState();
 }
 
+/// 1.4.4 (Apurba): in full-screen lyrics (the player's controls folded away
+/// after a few seconds, or while scrolling on a phone) the type buttons and the
+/// "Romanized · …" line go too: only the lyrics. They come back with the
+/// controls. The look picked stays.
+class _HiddenInFullScreen extends StatelessWidget {
+  final Widget child;
+  const _HiddenInFullScreen({required this.child});
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([LyricsPane.idle, LyricsPane.browsing]),
+    builder: (context, _) {
+      // scrolling folds the controls only on a phone-sized player
+      final full = LyricsPane.idle.value || (LyricsPane.browsing.value && MediaQuery.sizeOf(context).width < 820);
+      return AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: full ? const SizedBox(key: ValueKey('lyrics-tools-hidden'), width: double.infinity) : KeyedSubtree(key: const ValueKey('lyrics-tools'), child: child),
+      );
+    },
+  );
+}
+
 /// dual (1.4.3): the original and the same words in Roman letters side by
 /// side (or Roman over the original on a narrow phone).
 enum LyricsLook { original, romanized, hindi, translated, dual }
@@ -111,12 +132,18 @@ class _LyricsPaneState extends State<LyricsPane> {
       l = const Lyrics.none();
     }
     if (!mounted || _for?.id != it.id) return;
-    final first = defaultLookFor(l, Services.i.settings.lyricsScript);
+    final first = defaultLookFor(l, Services.i.settings.lyricsScript, picked: Services.i.settings.lyricsLook);
     setState(() {
       raw = l;
       look = first;
       if (lyricsNeedDual(l)) dual = buildDual(l);
-      lyrics = LyricsPane.shown = first == LyricsLook.dual ? l : lyricsInLook(l, first);
+      // 1.4.4: Romanized (the default) shows the same Roman words as the
+      // dual look's Roman side, with the same word fill
+      lyrics = LyricsPane.shown = first == LyricsLook.dual
+          ? l
+          : first == LyricsLook.romanized && dual != null
+          ? dual!.roman
+          : lyricsInLook(l, first);
       loading = false;
     });
     if (lyricsNeedDual(l)) unawaited(_betterRoman(it, l));
@@ -140,6 +167,9 @@ class _LyricsPaneState extends State<LyricsPane> {
     final r = raw;
     if (r == null || r.kind == LyricsKind.none) return;
     if (look == v) v = LyricsLook.original;
+    // 1.4.4: a look picked by hand for lyrics in another script is kept for
+    // the next songs and the next launch (translation needs the network: not kept)
+    if (v != LyricsLook.translated && lyricsNeedDual(r)) Services.i.settings.lyricsLook = v.name;
     if (v == LyricsLook.original) {
       setState(() {
         look = v;
@@ -254,7 +284,8 @@ class _LyricsPaneState extends State<LyricsPane> {
               valueListenable: LyricsPane.selection,
               builder: (context, sel, _) => sel != null
                   ? Padding(padding: const EdgeInsets.only(bottom: 6), child: _ShareBar(count: sel.length, color: c))
-                  : Column(
+                  : _HiddenInFullScreen(
+                      child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -326,6 +357,7 @@ class _LyricsPaneState extends State<LyricsPane> {
                           ),
                         ),
                       ],
+                    ),
                     ),
             ),
           ),
@@ -414,13 +446,28 @@ Lyrics devanagariLyrics(Lyrics l) {
 /// The look the person picked in Settings (Lyrics letters) for these lyrics:
 /// Hindi letters for a song in another Indian script; otherwise, for lyrics
 /// in a script other than Roman (Urdu, Hindi, Bengali, Punjabi, Tamil…),
-/// both side by side (1.4.3); English stays as it is.
-LyricsLook defaultLookFor(Lyrics l, String script) {
+/// the same words in Roman letters only (1.4.4, Apurba: "by default
+/// Romanized"); English stays as it is. [picked] is the look he picked by
+/// hand on the lyrics screen (Settings.lyricsLook): Both, Song's own…
+LyricsLook defaultLookFor(Lyrics l, String script, {String? picked}) {
   if (l.kind == LyricsKind.none) return LyricsLook.original;
   final sample = l.kind == LyricsKind.synced ? l.lines.take(40).map((x) => x.text).join(' ') : (l.plain ?? '');
+  final other = needsDualText(sample);
+  if (other && picked != null) {
+    switch (picked) {
+      case 'dual':
+        return LyricsLook.dual;
+      case 'original':
+        return LyricsLook.original;
+      case 'romanized':
+        return LyricsLook.romanized;
+      case 'hindi':
+        if (hasOtherIndicLetters(sample)) return LyricsLook.hindi;
+    }
+  }
   if (script == 'hindi' && hasOtherIndicLetters(sample)) return LyricsLook.hindi;
   if (script == 'hindi' && hasDevanagari(sample) && !hasArabicLetters(sample)) return LyricsLook.original; // reads Hindi letters
-  if (script != 'original' && needsDualText(sample)) return LyricsLook.dual;
+  if (script != 'original' && other) return LyricsLook.romanized;
   return LyricsLook.original;
 }
 
@@ -428,7 +475,9 @@ LyricsLook defaultLookFor(Lyrics l, String script) {
 /// The dual look's Roman side here (the mini line shows that one).
 Lyrics lyricsInLook(Lyrics l, LyricsLook look) => switch (look) {
   LyricsLook.hindi => devanagariLyrics(l),
-  LyricsLook.romanized => romanizeLyrics(l),
+  // 1.4.4: lyrics in another script use the dual look's Roman words (the same
+  // words, word for word, on the original's clock)
+  LyricsLook.romanized => lyricsNeedDual(l) ? buildDual(l).roman : romanizeLyrics(l),
   LyricsLook.dual => buildDual(l).roman,
   _ => l,
 };

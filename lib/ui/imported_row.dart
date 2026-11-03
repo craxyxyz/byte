@@ -13,6 +13,7 @@ import '../services.dart';
 import 'nav.dart';
 import 'screens/library_pages.dart' show LikedScreen;
 import 'screens/playlist_screen.dart';
+import 'service_rows.dart' show playlistsInServiceRows;
 import 'style.dart';
 import 'widgets.dart';
 
@@ -56,12 +57,17 @@ class ImportedRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lib = Services.i.library;
-    final lists = importedPlaylists(lib);
+    // 1.4.4: a logged-in account's playlists have their own row ("From
+    // Spotify") just above; this row keeps the rest (links, other sources).
+    final inRows = playlistsInServiceRows(lib);
+    final lists = importedPlaylists(lib).where((p) => !inRows.contains(p.id)).toList();
     final likes = lib.likes;
     var fromApps = false;
     try {
       fromApps = Services.i.spotify.connected || LibService.values.any(Services.i.libSync.connected);
     } catch (_) {}
+    // the service rows already carry Liked Songs: nothing left → no row
+    if (fromApps && lists.isEmpty) return const SizedBox.shrink();
     // nothing imported yet: no row at all
     if (lists.isEmpty && !(fromApps && likes.isNotEmpty)) return const SizedBox.shrink();
     return Column(

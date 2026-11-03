@@ -28,6 +28,7 @@ void main() {
     'lib/ui/screens/onboarding_screen.dart', // 1.4: first launch "Connect YouTube Music" button
     'lib/ui/music_apps.dart', // 1.4.1: Music apps — Log in on each app's own page (Apurba, Nov 3)
     'lib/data/service_library.dart', // 1.4.1: that log-in's library readers and their errors
+    'lib/ui/service_rows.dart', // 1.4.4: Home "From Spotify" row: names the logged-in app (Apurba, Nov 3)
     'lib/ui/imported_row.dart', // 1.4.2: Home row labels each imported playlist with the app it came from ("Amazon Music · 42 songs")
   };
   const loginLabels = [

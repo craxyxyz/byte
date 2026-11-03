@@ -22,8 +22,7 @@ void main() {
   Future<List<Item?>> matcher(List<ExtTrack> ts, void Function(int, int) progress) async {
     matched += ts.length;
     return [
-      for (final t in ts)
-        t.title.startsWith('Unknown') ? null : Item(kind: ItemKind.song, id: 'yt_${t.title.toLowerCase().replaceAll(' ', '_')}', title: t.title, artists: [ArtistRef(t.artists)]),
+      for (final t in ts) t.title.startsWith('Unknown') ? null : Item(kind: ItemKind.song, id: 'yt_${t.title.toLowerCase().replaceAll(' ', '_')}', title: t.title, artists: [ArtistRef(t.artists)]),
     ];
   }
 
@@ -51,19 +50,27 @@ void main() {
   test('two apps: both apps\' playlists and likes coexist; same-named lists stay separate; re-sync touches only its own app', () async {
     final amazon = await sync.importSnapshot(
       LibService.amazon,
-      LibSnapshot('Apurba', [t('Kesariya'), t('Tum Hi Ho')], [
-        LibPlaylist('A1', 'Romantic', [t('Kesariya'), t('Raabta')]),
-        LibPlaylist('A2', 'Gym', [t('Zinda', 'Siddharth Mahadevan')]),
-      ]),
+      LibSnapshot(
+        'Apurba',
+        [t('Kesariya'), t('Tum Hi Ho')],
+        [
+          LibPlaylist('A1', 'Romantic', [t('Kesariya'), t('Raabta')]),
+          LibPlaylist('A2', 'Gym', [t('Zinda', 'Siddharth Mahadevan')]),
+        ],
+      ),
     );
     expect(amazon.liked, 2);
     expect(amazon.playlists, 2);
 
     final saavn = await sync.importSnapshot(
       LibService.jiosaavn,
-      LibSnapshot('Apurba', [t('Tum Hi Ho'), t('Apna Bana Le')], [
-        LibPlaylist('J1', 'Romantic', [t('Pehla Nasha', 'Udit Narayan')]),
-      ]),
+      LibSnapshot(
+        'Apurba',
+        [t('Tum Hi Ho'), t('Apna Bana Le')],
+        [
+          LibPlaylist('J1', 'Romantic', [t('Pehla Nasha', 'Udit Narayan')]),
+        ],
+      ),
     );
     expect(saavn.playlists, 1);
 
@@ -79,10 +86,14 @@ void main() {
     // re-sync Amazon with a changed "Romantic": only Amazon's list changes
     await sync.importSnapshot(
       LibService.amazon,
-      LibSnapshot('Apurba', [t('Kesariya')], [
-        LibPlaylist('A1', 'Romantic', [t('Kesariya'), t('Raabta'), t('Agar Tum Saath Ho')]),
-        LibPlaylist('A2', 'Gym', [t('Zinda', 'Siddharth Mahadevan')]),
-      ]),
+      LibSnapshot(
+        'Apurba',
+        [t('Kesariya')],
+        [
+          LibPlaylist('A1', 'Romantic', [t('Kesariya'), t('Raabta'), t('Agar Tum Saath Ho')]),
+          LibPlaylist('A2', 'Gym', [t('Zinda', 'Siddharth Mahadevan')]),
+        ],
+      ),
     );
     final after = sv.library.playlists;
     expect(after.length, 3);
@@ -96,8 +107,26 @@ void main() {
   });
 
   test('two imports at the same moment run one after the other, nothing lost', () async {
-    final a = sync.importSnapshot(LibService.gaana, LibSnapshot('A', [t('Kal Ho Naa Ho', 'Sonu Nigam')], [LibPlaylist('G1', 'Old', [t('Kal Ho Naa Ho', 'Sonu Nigam')])]));
-    final b = sync.importSnapshot(LibService.deezer, LibSnapshot('A', [t('Blinding Lights', 'The Weeknd')], [LibPlaylist('D1', 'Old', [t('Levitating', 'Dua Lipa')])]));
+    final a = sync.importSnapshot(
+      LibService.gaana,
+      LibSnapshot(
+        'A',
+        [t('Kal Ho Naa Ho', 'Sonu Nigam')],
+        [
+          LibPlaylist('G1', 'Old', [t('Kal Ho Naa Ho', 'Sonu Nigam')]),
+        ],
+      ),
+    );
+    final b = sync.importSnapshot(
+      LibService.deezer,
+      LibSnapshot(
+        'A',
+        [t('Blinding Lights', 'The Weeknd')],
+        [
+          LibPlaylist('D1', 'Old', [t('Levitating', 'Dua Lipa')]),
+        ],
+      ),
+    );
     await Future.wait([a, b]);
     expect(sv.library.playlists.length, 2);
     expect(sv.library.likes.length, 2);
@@ -112,23 +141,26 @@ void main() {
   });
 
   test('a playlist whose songs can\'t be found is reported, and a later empty read never wipes a list', () async {
-    final r = await sync.importSnapshot(LibService.apple, LibSnapshot('A', [], [
-      LibPlaylist('P1', 'Good', [t('Raabta')]),
-      LibPlaylist('P2', 'Rare', [t('Unknown song 1'), t('Unknown song 2')]),
-    ]));
+    final r = await sync.importSnapshot(
+      LibService.apple,
+      LibSnapshot('A', [], [
+        LibPlaylist('P1', 'Good', [t('Raabta')]),
+        LibPlaylist('P2', 'Rare', [t('Unknown song 1'), t('Unknown song 2')]),
+      ]),
+    );
     expect(r.playlists, 1);
     expect(r.emptyPlaylists, ['Rare']);
-    await sync.importSnapshot(LibService.apple, LibSnapshot('A', [], [
-      LibPlaylist('P1', 'Good', [t('Unknown now')]),
-    ]));
+    await sync.importSnapshot(
+      LibService.apple,
+      LibSnapshot('A', [], [
+        LibPlaylist('P1', 'Good', [t('Unknown now')]),
+      ]),
+    );
     expect(sv.library.playlistBySource('apple:P1')!.items.map((i) => i.title), ['Raabta']);
   });
 
   test('a page that answers "ok: false, retry" asks to read again', () {
-    expect(
-      () => parseLibraryMessage(LibService.deezer, {'ok': false, 'retry': true, 'error': 'The page changed'}),
-      throwsA(isA<LibProblem>().having((e) => e.retry, 'retry', isTrue)),
-    );
+    expect(() => parseLibraryMessage(LibService.deezer, {'ok': false, 'retry': true, 'error': 'The page changed'}), throwsA(isA<LibProblem>().having((e) => e.retry, 'retry', isTrue)));
   });
 
   test('source labels for each app', () {
@@ -144,8 +176,26 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: ImportedRow())));
     expect(find.byKey(const ValueKey('home-imports')), findsNothing);
     await tester.runAsync(() async {
-      await sync.importSnapshot(LibService.amazon, LibSnapshot('A', [t('Kesariya')], [LibPlaylist('A1', 'Romantic', [t('Kesariya'), t('Raabta')])]));
-      await sync.importSnapshot(LibService.jiosaavn, LibSnapshot('A', [t('Tum Hi Ho')], [LibPlaylist('J1', 'Romantic', [t('Pehla Nasha', 'Udit Narayan')])]));
+      await sync.importSnapshot(
+        LibService.amazon,
+        LibSnapshot(
+          'A',
+          [t('Kesariya')],
+          [
+            LibPlaylist('A1', 'Romantic', [t('Kesariya'), t('Raabta')]),
+          ],
+        ),
+      );
+      await sync.importSnapshot(
+        LibService.jiosaavn,
+        LibSnapshot(
+          'A',
+          [t('Tum Hi Ho')],
+          [
+            LibPlaylist('J1', 'Romantic', [t('Pehla Nasha', 'Udit Narayan')]),
+          ],
+        ),
+      );
     });
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -154,23 +204,26 @@ void main() {
     // services is a different instance in tests, so check the playlists here.
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: HomeScreen())));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('From your music apps'), findsOneWidget);
-    expect(find.text('Amazon Music · 2 songs'), findsOneWidget);
-    expect(find.text('JioSaavn · 1 songs'), findsOneWidget);
+    // 1.4.4: each logged-in app has its own row ("From Amazon Music",
+    // "From JioSaavn"); "From your music apps" keeps only the rest.
+    expect(find.text('From Amazon Music'), findsOneWidget);
+    expect(find.text('From JioSaavn'), findsOneWidget);
+    expect(find.text('From your music apps'), findsNothing);
+    expect(find.text('2 songs'), findsOneWidget);
     expect(find.text('Romantic'), findsNWidgets(2));
     // first section: above every other title on Home
-    final row = tester.getTopLeft(find.byKey(const ValueKey('home-imports'))).dy;
+    final row = tester.getTopLeft(find.byKey(const ValueKey('home-service-rows'))).dy;
     for (final other in ['Top Picks for You', 'Recents', 'Quick picks', 'Find Your Mood']) {
       final f = find.text(other);
       if (f.evaluate().isNotEmpty) expect(tester.getTopLeft(f.first).dy, greaterThan(row), reason: other);
     }
     // tap: plays that playlist and opens it
-    await tester.tap(find.text('JioSaavn · 1 songs'));
+    final saavnRomantic = sv.library.playlists.firstWhere((p) => p.source == 'jiosaavn:J1');
+    await tester.tap(find.byKey(ValueKey('home-service-${saavnRomantic.id}')));
     await tester.pump(const Duration(milliseconds: 600));
     expect(sv.player.current.value?.title, 'Pehla Nasha');
     await tester.runAsync(() => sv.player.stop());
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 30));
   });
-
 }
