@@ -138,7 +138,10 @@ void main() {
       expect(lab.pitchFor(1), closeTo(2, 1e-9));
     });
 
-    test('gapless albums stay together; other songs blend', () {
+    test('gapless albums stay together (only when turned on, 1.4.5); other songs blend', () {
+      expect(lab.gapless, isFalse, reason: '1.4.5: off unless turned on by hand');
+      expect(lab.keepTogether('alb1', 'alb1'), isFalse);
+      lab.gapless = true;
       expect(lab.keepTogether('alb1', 'alb1'), isTrue);
       expect(lab.keepTogether('alb1', 'alb2'), isFalse);
       expect(lab.keepTogether(null, null), isFalse);

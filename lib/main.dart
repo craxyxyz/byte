@@ -42,6 +42,8 @@ import 'ui/glass.dart';
 import 'player/home_widget_sync.dart';
 import 'web/no_webview.dart';
 import 'web/web_proxy.dart';
+import 'ui/app_fullscreen.dart' show AppFullscreen;
+import 'package:window_manager/window_manager.dart';
 
 class HiveLyricsCache implements LyricsCache {
   final Box box;
@@ -78,6 +80,14 @@ Future<void> main() async {
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
     // Computers: keep Byte's data in its own app-data folder, not in Documents.
     Hive.init('${(await getApplicationSupportDirectory()).path}${Platform.pathSeparator}byte');
+    // 1.4.5: full-screen lyrics put the window in real full screen (title bar
+    // and taskbar / dock / menu bar covered); leaving restores the window.
+    try {
+      await windowManager.ensureInitialized();
+      AppFullscreen.desktopHook = (on) => windowManager.setFullScreen(on);
+    } catch (_) {
+      // No window plugin: full-screen lyrics stay inside the window.
+    }
   } else {
     await Hive.initFlutter('byte');
   }

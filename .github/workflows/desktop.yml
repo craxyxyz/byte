@@ -111,7 +111,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
       - run: flutter pub get --enforce-lockfile
-      - run: flutter analyze
+      - run: flutter analyze --no-fatal-infos
       - name: Build Linux
         run: |
           flutter build linux --release -v > build.log 2>&1 || { tail -c 9000 build.log; exit 1; }

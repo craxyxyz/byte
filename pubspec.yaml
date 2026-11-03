@@ -61,6 +61,8 @@ dependencies:
   # Windows + Linux audio (Byte's own MIT backend on media_kit, see packages/byte_desktop_audio).
   byte_desktop_audio:
     path: packages/byte_desktop_audio
+  # Windows / macOS / Linux: real full screen for full-screen lyrics (MIT).
+  window_manager: ^0.5.1
 
 # Byte: just_audio with Byte's own balance/mono/crossfeed stage (MIT, see packages/just_audio/LICENSE).
 dependency_overrides:

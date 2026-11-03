@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,6 +10,7 @@ import '../core/models.dart';
 import '../data/settings.dart' show Settings;
 import '../player/byte_handler.dart';
 import '../services.dart';
+import 'app_fullscreen.dart';
 import 'art_background.dart';
 import 'lyrics_view.dart';
 import 'player_parts.dart';
@@ -61,6 +63,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     if (widget.initial != NpTab.song) sideTab = widget.initial;
     WidgetsBinding.instance.addPostFrameCallback((_) => _poke());
     if (_hidBar) SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    LyricsPane.idle.addListener(_syncFullscreen);
+    LyricsPane.browsing.addListener(_syncFullscreen);
+    HardwareKeyboard.instance.addHandler(_onKey);
     openListenTogether = (c) => Navigator.of(c).push(MaterialPageRoute(builder: (_) => const ListenTogetherScreen()));
   }
 
@@ -81,8 +86,47 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     });
   }
 
+  // ── 1.4.5: full-screen lyrics fill the whole screen on a computer / web ──
+  Timer? _cursorTimer;
+  bool _cursorHidden = false;
+
+  /// Full-screen lyrics (the controls gone) → the window goes full screen;
+  /// it stays so while the lyrics are on screen (a mouse move brings the
+  /// controls back, not the title bar), and leaves with the lyrics, Esc or F11.
+  void _syncFullscreen() {
+    if (!mounted) return;
+    final lyricsFull = _lyricsOnScreen && (LyricsPane.idle.value || LyricsPane.browsing.value);
+    if (lyricsFull && !AppFullscreen.active.value) {
+      unawaited(AppFullscreen.enter());
+      _wakeCursor();
+    } else if (!_lyricsOnScreen && AppFullscreen.active.value) {
+      unawaited(AppFullscreen.exit());
+    }
+  }
+
+  bool _onKey(KeyEvent e) {
+    if (!mounted) return false;
+    final handled = AppFullscreen.handleKey(e);
+    if (handled) setState(() {});
+    return handled;
+  }
+
+  void _wakeCursor() {
+    _cursorTimer?.cancel();
+    if (_cursorHidden) setState(() => _cursorHidden = false);
+    if (!AppFullscreen.active.value) return;
+    _cursorTimer = Timer(AppFullscreen.cursorIdle, () {
+      if (mounted && AppFullscreen.active.value) setState(() => _cursorHidden = true);
+    });
+  }
+
   @override
   void dispose() {
+    LyricsPane.idle.removeListener(_syncFullscreen);
+    LyricsPane.browsing.removeListener(_syncFullscreen);
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    _cursorTimer?.cancel();
+    if (AppFullscreen.active.value) unawaited(AppFullscreen.exit());
     _idleTimer?.cancel();
     LyricsPane.idle.value = false;
     _controlsTop.dispose();
@@ -110,8 +154,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   void _setMode(PlayerMode m) {
     LyricsPane.browsing.value = false;
     LyricsPane.selection.value = null;
+    // A browser allows full screen only straight after a tap: ask now.
+    if (kIsWeb && m == PlayerMode.lyrics) unawaited(AppFullscreen.enter());
     setState(() => mode = m);
     _poke();
+    _syncFullscreen();
   }
 
   @override
@@ -127,7 +174,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       data: ByteTheme.player(Theme.of(context)),
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: Listener(
+        body: MouseRegion(
+          cursor: _cursorHidden && AppFullscreen.active.value ? SystemMouseCursors.none : MouseCursor.defer,
+          onHover: (_) => _wakeCursor(),
+          child: Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: (_) => _poke(),
           child: ArtBackground(
@@ -184,6 +234,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
             },
           ),
           ),
+        ),
         ),
       ),
     );
@@ -344,8 +395,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                     mode: PlayerMode.song,
                                     sideMode: sideTab == NpTab.lyrics ? PlayerMode.lyrics : PlayerMode.queue,
                                     onMode: (m) {
+                                      if (kIsWeb && m == PlayerMode.lyrics) unawaited(AppFullscreen.enter());
                                       if (m != PlayerMode.song) setState(() => sideTab = m == PlayerMode.lyrics ? NpTab.lyrics : NpTab.queue);
                                       _poke();
+                                      _syncFullscreen();
                                     },
                                   ),
                                 ],
