@@ -29,7 +29,7 @@ jobs:
       - name: Tests
         run: flutter test
 
-      - name: Check the iOS project (background audio, URL scheme, app icons, Automix + DJ voice)
+      - name: Check the iOS project (background audio, URL scheme, app icons, Automix)
         run: |
           /usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes:0' ios/Runner/Info.plist | grep -qx audio
           /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' ios/Runner/Info.plist | grep -qx byte
@@ -51,20 +51,19 @@ jobs:
         run: |
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundleAlternateIcons' build/ios/iphoneos/Runner.app/Info.plist
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundleAlternateIcons' build/ios/iphoneos/Runner.app/Info.plist | grep -q AppIcon-NeonViolet
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/ios/iphoneos/Runner.app/Info.plist | grep -qx 1.3.0
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/ios/iphoneos/Runner.app/Info.plist | grep -qx 2.0.0
           nm build/ios/iphoneos/Runner.app/Runner | grep -q ByteEQ && echo "equalizer compiled in"
           nm build/ios/iphoneos/Runner.app/Runner | grep -q AutomixDecoder && echo "automix decoder compiled in"
-          nm build/ios/iphoneos/Runner.app/Runner | grep -q ByteVoice && echo "DJ voice compiled in"
           (ls build/ios/iphoneos/Runner.app/Frameworks | grep -i video_player || nm build/ios/iphoneos/Runner.app/Runner | grep -qi FVPVideoPlayer) && echo "video mode player compiled in" || echo "note: video player linked another way"
 
       - name: Package .ipa
         run: |
           mkdir -p build/ipa/Payload
           cp -R build/ios/iphoneos/Runner.app build/ipa/Payload/
-          cd build/ipa && zip -qry ../../Byte-v1.3-unsigned.ipa Payload
+          cd build/ipa && zip -qry ../../Byte-2.0.0-unsigned.ipa Payload
 
       - uses: actions/upload-artifact@v4
         with:
           name: Byte-iOS-unsigned-ipa
-          path: Byte-v1.3-unsigned.ipa
+          path: Byte-2.0.0-unsigned.ipa
           retention-days: 30
