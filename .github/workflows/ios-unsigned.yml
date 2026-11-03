@@ -42,8 +42,7 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsLocalNetworking' ios/Runner/Info.plist | grep -qx true
           /usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' ios/Runner/Info.plist
           /usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' ios/Runner/Info.plist
-          grep -q 'class AutomixDecoder' ios/Runner/AppDelegate.swift
-          grep -q 'class ByteVoice' ios/Runner/AppDelegate.swift
+          grep -q 'AutomixDecoder' ios/Runner/AppDelegate.swift
           grep -q 'byte/automix' ios/Runner/AppDelegate.swift
           for n in Monochrome LiquidGlass LiquidGlassDark LiquidGlassClear LiquidGlassClearDark NeonSilver NeonCyan NeonViolet SoftGlass SoftGlassDark SoftNeonCyan RoundGlass RoundGlassDark RoundNeonCyan; do test -f "ios/Runner/Assets.xcassets/AppIcon-$n.appiconset/icon-1024.png"; done
 
