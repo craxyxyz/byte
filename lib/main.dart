@@ -14,6 +14,7 @@ import 'ui/screens/settings_pages.dart' show applyRefreshRate;
 import 'package:path_provider/path_provider.dart';
 import 'core/cover_cache.dart';
 import 'core/crash_log.dart';
+import 'core/frame_log.dart';
 import 'brand.dart';
 import 'core/innertube.dart';
 import 'core/net.dart';
@@ -77,6 +78,9 @@ Future<void> main() async {
   // 1.4.5: and the Audio Lab through the computer player's filters.
   DesktopSoundBackend.register();
   if (kReleaseMode) debugPrint = (String? message, {int? wrapWidth}) {};
+  // 1.4.5.1: BYTE_FRAME_LOG=1 prints frames per second and their build /
+  // raster time (desktop smoothness checks).
+  if (!kIsWeb && Platform.environment['BYTE_FRAME_LOG'] == '1') FrameLog.start();
   // 1.4.5: uncaught errors go to a small log on the phone (About → Report a problem).
   String? logDir;
   if (!kIsWeb) {

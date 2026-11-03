@@ -15,8 +15,15 @@ import 'mpv_filters.dart';
 class DesktopSoundBackend extends SoundBackend {
   const DesktopSoundBackend();
 
+  /// 1.4.5.1: the Windows player has no sound filters (any Audio Lab chain
+  /// silenced the song there), so on Windows the Audio Lab shows as not
+  /// available; speed and pitch still work (the player's own).
   @override
-  SoundCaps get caps => ByteDesktopAudio.available ? SoundCaps.desktop : SoundCaps.desktopPlain;
+  SoundCaps get caps => !ByteDesktopAudio.available
+      ? SoundCaps.desktopPlain
+      : ByteDesktopAudio.filtersSupported
+      ? SoundCaps.desktop
+      : SoundCaps.desktopPlain.copyWith(pitch: true, keepPitch: true);
 
   @override
   Future<void> apply(AudioLab lab, Map<String, Object?> config) => ByteDesktopAudio.setEffects(caps.eq ? mpvFilterGraph(lab) : '');

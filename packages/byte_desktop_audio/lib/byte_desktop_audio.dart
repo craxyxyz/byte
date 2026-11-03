@@ -46,6 +46,60 @@ class ByteDesktopAudio extends JustAudioPlatform {
   static String effects = '';
   static final Set<_DesktopPlayer> _live = {};
 
+  /// 1.4.5.1: can this computer's player run the Audio Lab's filters?
+  ///
+  /// The Windows player library Byte ships (an audio-only build) has almost
+  /// no audio filters: no limiter, no equalizer shelves, no compressor, no
+  /// pan, no echo. Measured on Windows (1.4.5 bug, Apurba's laptop): any
+  /// Audio Lab chain made the player log "No such filter: 'alimiter'" →
+  /// "Audio filter initialized failed!" → "Audio: no audio", and the song
+  /// played SILENTLY while its clock and progress bar kept moving. Clearing
+  /// the chain afterwards did not bring that song's sound back.
+  /// So: Windows never gets a chain; Linux (full system player) does, and a
+  /// player that still rejects one turns the filters off for good and gets
+  /// its song reloaded where it was, so the sound is never lost.
+  static bool filtersSupported = defaultFiltersSupported();
+
+  /// Windows: no filters (see [filtersSupported]); Linux: yes.
+  @visibleForTesting
+  static bool Function() defaultFiltersSupported = () => !Platform.isWindows;
+
+  /// The chain the players really run ('' when unsupported or rejected).
+  static String get usableEffects => filtersSupported ? effects : '';
+
+  /// Turned true when a player refused the Audio Lab chain (the app then
+  /// shows the Audio Lab as not available on this computer).
+  static final ValueNotifier<bool> filtersRejected = ValueNotifier(false);
+
+  /// A log line from the player that means its sound filters failed.
+  @visibleForTesting
+  static bool isFilterFailure(String text) {
+    final t = text.toLowerCase();
+    return t.contains("creating filter 'lavfi' failed") ||
+        t.contains('audio filter initialized failed') ||
+        t.contains('audio filter chain') && t.contains('fail') ||
+        t.contains('parsing the filter graph failed') ||
+        t.contains('no such filter') ||
+        t.contains('error creating filters') ||
+        t.contains('disabling filter lavfi');
+  }
+
+  /// A player refused the chain: no more filters for anyone, and every
+  /// player that was playing gets its song back with sound.
+  static Future<void> _filtersFailed(_DesktopPlayer from) async {
+    if (!filtersSupported) {
+      await from._recover();
+      return;
+    }
+    filtersSupported = false;
+    filtersRejected.value = true;
+    debugPrint('desktop audio: the player refused the sound filters; Audio Lab off on this computer');
+    for (final p in _live.toList()) {
+      await p._applyAf(force: true);
+    }
+    await from._recover();
+  }
+
   /// The filters the first live player really runs, as the player reports
   /// them (live tests).
   @visibleForTesting
@@ -58,11 +112,17 @@ class ByteDesktopAudio extends JustAudioPlatform {
   /// Use [chain] on every player now and on each new one.
   static Future<void> setEffects(String chain) async {
     if (chain == effects) return;
+    final before = usableEffects;
     effects = chain;
+    if (usableEffects == before) return; // nothing the players run changes
     for (final p in _live.toList()) {
-      await p._applyAf(force: true);
+      await p._applyAf();
     }
   }
+
+  /// How many times the players' filters were rewritten (tests: no storms).
+  @visibleForTesting
+  static int afWrites = 0;
 
   final Map<String, _DesktopPlayer> _players = {};
 
@@ -131,6 +191,10 @@ class _DesktopPlayer extends AudioPlayerPlatform {
       unawaited(_applyAf());
       final s = _p!.stream;
       _subs.addAll([
+        // 1.4.5.1: the player's own words when its sound filters fail.
+        s.log.listen((l) {
+          if (ByteDesktopAudio.isFilterFailure(l.text)) unawaited(ByteDesktopAudio._filtersFailed(this));
+        }),
         s.playing.listen((_) {
           // Paused / about to start: the song stands still, so its position
           // is true as of now (a stale time here would make players
@@ -283,6 +347,7 @@ class _DesktopPlayer extends AudioPlayerPlatform {
       for (var i = 0; i < srcs.length; i++)
         mk.Media(srcs[i].uri, httpHeaders: srcs[i].headers, start: i == _index && start != null && start > Duration.zero ? start : null),
     ];
+    _medias = medias;
     await p.open(mk.Playlist(medias, index: _index), play: false);
     try {
       await _ready.future.timeout(const Duration(seconds: 30));
@@ -319,21 +384,28 @@ class _DesktopPlayer extends AudioPlayerPlatform {
 
   @override
   Future<SetSpeedResponse> setSpeed(SetSpeedRequest request) async {
-    if (request.speed > 0) {
-      await _p?.setRate(request.speed);
+    final p = _p;
+    if (request.speed > 0 && p != null) {
+      // 1.4.5.1: the same speed again (every song load, party nudges that
+      // round to the same rate) changes nothing. Before, each call rebuilt
+      // the whole sound chain twice: a click / dropout each time.
+      if (_tempo && (p.state.rate - request.speed).abs() < 1e-9) return SetSpeedResponse();
+      await p.setRate(request.speed);
       _tempo = true;
-      await _applyAf(force: true); // the player rewrote its filters
+      await _afterTempo();
     }
     return SetSpeedResponse();
   }
 
   @override
   Future<SetPitchResponse> setPitch(SetPitchRequest request) async {
-    if (request.pitch > 0) {
+    final p = _p;
+    if (request.pitch > 0 && p != null) {
+      if (_tempo && (p.state.pitch - request.pitch).abs() < 1e-9) return SetPitchResponse();
       try {
-        await _p?.setPitch(request.pitch);
+        await p.setPitch(request.pitch);
         _tempo = true;
-        await _applyAf(force: true);
+        await _afterTempo();
       } catch (_) {}
     }
     return SetPitchResponse();
@@ -342,21 +414,58 @@ class _DesktopPlayer extends AudioPlayerPlatform {
   /// Speed / pitch were set (the player then keeps its own tempo filter).
   bool _tempo = false;
   String? _af;
+  List<mk.Media>? _medias;
+  bool _recovering = false;
+
+  /// The player dropped this song's sound (its filters failed): load the
+  /// same song again at the same spot, without filters, playing if it was.
+  Future<void> _recover() async {
+    final p = _p;
+    final medias = _medias;
+    if (p == null || medias == null || _recovering) return;
+    _recovering = true;
+    try {
+      final at = p.state.position;
+      final wasPlaying = p.state.playing;
+      final i = _index.clamp(0, medias.length - 1);
+      final again = [
+        for (var k = 0; k < medias.length; k++)
+          k == i ? mk.Media(medias[k].uri, httpHeaders: medias[k].httpHeaders, start: at > Duration.zero ? at : null) : medias[k],
+      ];
+      await p.open(mk.Playlist(again, index: i), play: wasPlaying);
+    } catch (e) {
+      debugPrint('desktop audio: reload after filter failure: $e');
+    } finally {
+      _recovering = false;
+    }
+  }
+
+  String _tempoAf() {
+    final st = _p!.state;
+    return 'scaletempo:scale=${(st.rate / (st.pitch <= 0 ? 1 : st.pitch)).toStringAsFixed(8)}';
+  }
+
+  /// The player just wrote its own tempo filter (and dropped ours): only put
+  /// the Audio Lab back when there is one (no second rebuild otherwise).
+  Future<void> _afterTempo() async {
+    _af = _tempoAf();
+    await _applyAf();
+  }
 
   /// This player's filters: its tempo filter (speed / pitch), then the
   /// Audio Lab chain. A chain the player refuses leaves the old one playing.
   Future<void> _applyAf({bool force = false}) async {
     final p = _p;
     if (p == null) return;
-    final st = p.state;
-    final fx = ByteDesktopAudio.effects;
+    final fx = ByteDesktopAudio.usableEffects;
     final af = [
-      if (_tempo) 'scaletempo:scale=${(st.rate / (st.pitch <= 0 ? 1 : st.pitch)).toStringAsFixed(8)}',
+      if (_tempo) _tempoAf(),
       if (fx.isNotEmpty) 'lavfi=[$fx]',
     ].join(',');
     if (!force && af == _af) return;
     if (af.isEmpty && _af == null) return; // nothing set yet, nothing to clear
     _af = af;
+    ByteDesktopAudio.afWrites++;
     try {
       await (p.platform as dynamic).setProperty('af', af);
     } catch (e) {

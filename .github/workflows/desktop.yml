@@ -18,6 +18,10 @@ on:
         description: "Platforms to build: all, or any of windows linux apple"
         type: string
         default: all
+      tag:
+        description: "Release tag instead of v<version> (e.g. v1.4.5-pc1); file names get the same suffix"
+        type: string
+        default: ''
       mac_runner:
         description: "Runner for the macOS + iPhone job (macos-latest is arm64; Intel when arm64 runners are short)"
         type: string
@@ -75,6 +79,27 @@ jobs:
           $v | Format-List ProductName, ProductVersion, FileVersion, CompanyName, LegalCopyright
           if ($v.ProductName -ne "Byte") { throw "ProductName is $($v.ProductName)" }
           Get-ChildItem build/windows/x64/runner/Release
+      # 1.4.5.1: the Windows player must make sound with every Audio Lab
+      # option saved on (1.4.5 played silently). A virtual speaker + loopback
+      # recording on the runner, the real libmpv-2.dll from this build.
+      - uses: LABSN/sound-ci-helpers@v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Sound check (virtual speaker, loopback recording)
+        shell: bash
+        run: |
+          pip install -q soundcard numpy
+          export PATH="$PWD/build/windows/x64/runner/Release:$PATH"
+          BYTE_LEVEL_CMD="python .github/scripts/loopback_level.py" flutter test test_live/v1451_pc_sound_live_test.dart -r expanded > sound.log 2>&1 || true
+          grep -a "\[sound\]\|+[0-9]*.*:\|Expected\|Actual\|silent" sound.log | tail -n 30 || true
+          python - <<'EOF'
+          t=open('sound.log',encoding='utf-8',errors='replace').read()
+          lines=[l for l in t.splitlines() if '[sound]' in l or 'All tests passed' in l or 'Some tests failed' in l or 'Expected' in l or 'Actual' in l]
+          msg='\n'.join(lines)[-3500:] or t[-3500:]
+          print('::notice title=sound check::'+msg.replace('%','%25').replace('\r','').replace('\n','%0A'))
+          EOF
+          grep -q "All tests passed" sound.log
       - name: Zip
         shell: pwsh
         run: |
@@ -237,7 +262,8 @@ jobs:
 
   release:
     needs: [windows, linux, apple]
-    if: github.ref == 'refs/heads/main'
+    # A platform left out on purpose (only: windows linux) doesn't stop it.
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -249,15 +275,25 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: Tag (and file names) for a fix release
+        if: ${{ inputs.tag != '' }}
+        shell: bash
+        run: |
+          T="${{ inputs.tag }}"
+          cd dist
+          for f in *v$BYTE_VERSION*; do mv "$f" "${f/v$BYTE_VERSION/$T}"; done
+          echo "REL_TAG=$T" >> "$GITHUB_ENV"
+          echo "REL_NAME=Byte ${T#v}" >> "$GITHUB_ENV"
       - run: ls -la dist && (cd dist && sha256sum * | tee SHA256SUMS.txt)
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.publish && format('v{0}', env.BYTE_VERSION) || 'pipeline-test' }}
+          tag_name: ${{ inputs.publish && (env.REL_TAG || format('v{0}', env.BYTE_VERSION)) || 'pipeline-test' }}
           target_commitish: ${{ github.sha }}
-          name: ${{ inputs.publish && format('Byte {0}', env.BYTE_VERSION) || 'pipeline-test (not a release)' }}
+          name: ${{ inputs.publish && (env.REL_NAME || format('Byte {0}', env.BYTE_VERSION)) || 'pipeline-test (not a release)' }}
           prerelease: ${{ !inputs.publish }}
           body: |
             Byte ${{ env.BYTE_VERSION }} for Windows, macOS, Linux and iPhone (unsigned).
+            ${{ inputs.tag != '' && 'Fix release for the computer apps: sound on Windows is back (the Audio Lab filters silenced it), lighter playback.' || '' }}
             Windows: run Byte-Setup, or unzip and open Byte.exe. If SmartScreen appears: More info → Run anyway.
             macOS: open the .dmg and drag Byte to Applications. First launch: right-click Byte → Open (or System Settings → Privacy & Security → Open Anyway).
             Linux: extract the .tar.gz and run ./byte (needs libmpv: sudo apt install libmpv2), or run the AppImage.

@@ -57,6 +57,11 @@ class AudioRouteInfo {
 
   bool get onPhoneSpeaker => outputType == 'speaker';
 
+  /// Byte runs as a computer app (Windows, Linux, macOS); tests can pretend.
+  static bool Function() computer = () =>
+      !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS);
+  bool get onComputer => computer();
+
   /// The line under the output button: "Apurba's Phone", "AirDopes 141"…
   String get label => outputType == 'speaker' || outputName == null || outputName!.isEmpty ? phoneName : outputName!;
 
@@ -64,6 +69,8 @@ class AudioRouteInfo {
   /// ("SM-S911B") or nothing, it's "Apurba's Phone" (the listener's name).
   String get phoneName {
     if (kIsWeb) return 'This browser';
+    // 1.4.5.1: a laptop is not "Apurba's Phone" (Windows / Linux / Mac).
+    if (onComputer) return 'This computer';
     final generic = deviceName.trim().isEmpty || deviceName == 'This phone' || deviceName == 'iPhone' || (model != null && deviceName.trim() == model!.trim());
     if (!generic) return deviceName;
     final n = ownerName().trim();
@@ -75,7 +82,7 @@ class AudioRouteInfo {
     'bluetooth' => 'Bluetooth',
     'wired' => 'Headphones',
     'hdmi' => 'HDMI',
-    _ => 'Phone speaker',
+    _ => onComputer ? 'Computer speaker' : 'Phone speaker',
   };
 
   factory AudioRouteInfo.fromMap(Map m) {
