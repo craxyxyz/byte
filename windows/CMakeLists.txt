@@ -2,6 +2,10 @@
 cmake_minimum_required(VERSION 3.14)
 project(byte LANGUAGES CXX)
 
+# Byte: Visual Studio 2026 refuses the old /await coroutines one plugin
+# (permission_handler_windows) still uses, unless told to allow them.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "Byte")

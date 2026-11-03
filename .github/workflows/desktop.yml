@@ -13,6 +13,10 @@ on:
         description: "Publish the GitHub Release v<version> (otherwise a pre-release called pipeline-test)"
         type: boolean
         default: false
+      only:
+        description: "Platforms to build: all, or any of windows linux apple"
+        type: string
+        default: all
 
 permissions:
   contents: write
@@ -26,6 +30,7 @@ concurrency:
 
 jobs:
   windows:
+    if: ${{ !inputs.only || inputs.only == 'all' || contains(inputs.only, 'windows') }}
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -86,6 +91,7 @@ jobs:
           if-no-files-found: error
 
   linux:
+    if: ${{ !inputs.only || inputs.only == 'all' || contains(inputs.only, 'linux') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -152,6 +158,7 @@ jobs:
           if-no-files-found: error
 
   apple:
+    if: ${{ !inputs.only || inputs.only == 'all' || contains(inputs.only, 'apple') }}
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
