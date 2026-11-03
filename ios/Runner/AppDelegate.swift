@@ -92,8 +92,13 @@ import WebKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ByteEQ") {
       let channel = FlutterMethodChannel(name: "byte/eq", binaryMessenger: registrar.messenger())
       channel.setMethodCallHandler { call, result in
-        guard call.method == "set" || call.method == "lowcut", let args = call.arguments as? [String: Any] else {
+        guard call.method == "set" || call.method == "lowcut" || call.method == "channels", let args = call.arguments as? [String: Any] else {
           result(FlutterMethodNotImplemented)
+          return
+        }
+        if call.method == "channels" {
+          ByteEQ.setBalance(Float((args["balance"] as? Double) ?? 0), mono: (args["mono"] as? Bool) ?? false)
+          result(true)
           return
         }
         if call.method == "lowcut" {

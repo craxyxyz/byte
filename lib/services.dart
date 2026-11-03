@@ -19,6 +19,7 @@ import 'data/local_music.dart';
 import 'data/scrobble.dart';
 import 'data/settings.dart';
 import 'data/party_sound.dart';
+import 'data/party_up_next.dart';
 import 'data/spotify_account.dart';
 import 'data/spotify_sync.dart';
 import 'data/service_library.dart';
@@ -193,10 +194,20 @@ class Services {
       return null;
     };
     // 1.4.1: up next / song radio ranked by the listener's own signals.
+    // 1.4.5: always (a new listener gets the song's radio, deduped and
+    // varied); the last songs played set the mood with the seed; a song
+    // skipped by hand within 30 s sinks its artist at once.
     player.personalRadio = (seed, exclude) async {
       final t = TasteProfile.build(library: library, stats: stats, log: playLog);
-      if (t.isEmpty) return const [];
-      return [for (final p in await PersonalRadio.forSeed(yt, seed, t, exclude: exclude)) p.item];
+      final played = player.queueModel.playOrder.take(player.queueModel.position + 1).toList().reversed.toList();
+      final context = [...played.take(5), ...t.recent.take(5)];
+      return [for (final p in await PersonalRadio.forSeed(yt, seed, t, exclude: exclude, context: context, count: 20)) p.item];
+    };
+    player.holdRadio = () => _dj?.active ?? false; // the DJ keeps its own set queued
+    player.onUserSkip = (it, heardMs) {
+      if (heardMs >= 30000) return;
+      PersonalRadio.feedback.skip(it);
+      player.dropRadioLike(it);
     };
   }
 
@@ -349,8 +360,21 @@ class Services {
       readClassicEq: () => settings.eqEnabled,
       writeClassicEq: (on) => settings.eqEnabled = on,
     );
+    partyUpNext = PartyUpNext(
+      link: ListenTogetherLink(party),
+      upcoming: () {
+        final o = player.queueModel.playOrder;
+        return o.sublist((player.queueModel.position + 1).clamp(0, o.length));
+      },
+      current: () => player.current.value,
+      queueChanges: player.queueVersion,
+      target: player.partyUpNext,
+    );
   }
 
   /// Listen together → the host's sound, lent to guests who accept (1.4.2).
   late final PartySound partySound;
+
+  /// Listen together → the host's next songs on every guest's Queue (1.4.5).
+  late final PartyUpNext partyUpNext;
 }

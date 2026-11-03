@@ -68,6 +68,11 @@ dependencies:
 dependency_overrides:
   just_audio:
     path: packages/just_audio
+  # Byte 1.4.5: audio_service 0.18.19 (MIT, see packages/audio_service/LICENSE) with two
+  # fixes in AudioService.java — no crash when Android refuses a foreground start from the
+  # background, and the player stays in the foreground for 10 min after a pause.
+  audio_service:
+    path: packages/audio_service
 
 dev_dependencies:
   flutter_test:

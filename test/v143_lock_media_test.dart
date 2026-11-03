@@ -241,7 +241,8 @@ void main() {
     expect(byteAudioConfig.artDownscaleWidth, isNull, reason: 'no shrinking the lock-screen card');
     expect(byteAudioConfig.artDownscaleHeight, isNull);
     expect(byteAudioConfig.androidNotificationClickStartsActivity, isTrue);
-    expect(byteAudioConfig.androidNotificationOngoing, isTrue);
+    // 1.4.5: paused = swipeable (the patched service keeps the foreground 10 min after a pause)
+    expect(byteAudioConfig.androidNotificationOngoing, isFalse);
     expect(byteAudioConfig.androidStopForegroundOnPause, isTrue);
     // the channel Byte makes first is the one the media service uses, public on the lock screen
     final kt = File('android/app/src/main/kotlin/com/apurbalaskar/byteapp/ByteMediaChannel.kt').readAsStringSync();
@@ -255,7 +256,9 @@ void main() {
     // the media library's own notification is public too
     final pkgs = jsonDecode(File('.dart_tool/package_config.json').readAsStringSync()) as Map;
     final as = (pkgs['packages'] as List).cast<Map>().firstWhere((e) => e['name'] == 'audio_service');
-    final java = File('${Uri.parse(as['rootUri'] as String).toFilePath()}/android/src/main/java/com/ryanheise/audioservice/AudioService.java');
+    // 1.4.5: audio_service is a local package now (packages/audio_service: rootUri relative to .dart_tool/)
+    final root = Uri.directory('${Directory.current.path}/.dart_tool/').resolve(as['rootUri'] as String).toFilePath();
+    final java = File('$root/android/src/main/java/com/ryanheise/audioservice/AudioService.java');
     expect(java.existsSync(), isTrue); expect(java.readAsStringSync(), contains('setVisibility(NotificationCompat.VISIBILITY_PUBLIC)'));
   });
 

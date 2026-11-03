@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../audiolab/sound_backend.dart';
 import '../data/settings.dart';
 
 /// Ready-made shapes, as dB per band from low to high. Stretched to however
@@ -138,7 +139,8 @@ class ByteEqualizer extends ChangeNotifier {
   }
 
   Future<void> apply() async {
-    if (ios) {
+    // 1.4.5: while the Audio Lab equalizer is on it owns the iPhone tap.
+    if (ios && !(IosSoundBackend.labOwnsEq && !settings.eqEnabled)) {
       final call = <String, Object>{'enabled': settings.eqEnabled, 'freqs': iosBands, 'gains': gains};
       lastIosCall = call;
       try {

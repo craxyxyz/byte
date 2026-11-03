@@ -63,6 +63,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     if (widget.initial != NpTab.song) sideTab = widget.initial;
     WidgetsBinding.instance.addPostFrameCallback((_) => _poke());
     if (_hidBar) SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    AppFullscreen.keepImmersive = _hidBar;
     LyricsPane.idle.addListener(_syncFullscreen);
     LyricsPane.browsing.addListener(_syncFullscreen);
     HardwareKeyboard.instance.addHandler(_onKey);
@@ -126,6 +127,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     LyricsPane.browsing.removeListener(_syncFullscreen);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _cursorTimer?.cancel();
+    AppFullscreen.keepImmersive = false;
     if (AppFullscreen.active.value) unawaited(AppFullscreen.exit());
     _idleTimer?.cancel();
     LyricsPane.idle.value = false;
@@ -240,6 +242,21 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 
+  /// 1.4.5: in full-screen lyrics the close arrow and the handle fold away
+  /// too (only the lyrics on the screen); a touch brings them back.
+  Widget _foldingGrabber(BuildContext context, {bool caption = false}) => ValueListenableBuilder<bool>(
+    valueListenable: LyricsPane.idle,
+    builder: (context, idle, child) {
+      final hide = idle && _lyricsOnScreen;
+      return AnimatedSize(
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+        child: hide ? const SizedBox(width: double.infinity, height: 0) : child,
+      );
+    },
+    child: _grabber(context, caption: caption),
+  );
+
   /// Swipe-down handle and close button (over the cover: "Playing from …" under the handle).
   Widget _grabber(BuildContext context, {bool caption = false}) => SizedBox(
     height: caption ? 52 : 40,
@@ -291,7 +308,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       },
       child: Column(
         children: [
-          _grabber(context, caption: bleed),
+          _foldingGrabber(context, caption: bleed),
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 320),
@@ -371,7 +388,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     // a touch brings everything back.
     return Column(
       children: [
-        _grabber(context),
+        _foldingGrabber(context),
         Expanded(
           child: ValueListenableBuilder<bool>(
             valueListenable: LyricsPane.idle,
@@ -1435,72 +1452,136 @@ class _QueuePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Services.i.player;
-    return ValueListenableBuilder<int>(
-      valueListenable: p.queueVersion,
-      builder: (context, _, _) => ValueListenableBuilder<Item?>(
-        valueListenable: p.current,
-        builder: (context, cur, _) {
-          final items = p.queueModel.playOrder;
-          final pos = p.queueModel.position.clamp(0, items.isEmpty ? 0 : items.length - 1);
-          // Played songs: hidden, or the last 25 with "Show queue history".
-          final start = Services.i.settings.showQueueHistory ? (pos - 25).clamp(0, pos) : pos + 1;
-          final rest = items.length - start.clamp(0, items.length);
-          const label = TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w700);
-          final from = p.playingFrom.value;
-          return CustomScrollView(
-            slivers: [
+    return AnimatedBuilder(
+      animation: Listenable.merge([p.queueVersion, p.current, p.radioLoading, p.partyUpNext]),
+      builder: (context, _) {
+        final cur = p.current.value;
+        final items = p.queueModel.playOrder;
+        final pos = p.queueModel.position.clamp(0, items.isEmpty ? 0 : items.length - 1);
+        // Played songs: hidden, or the last 25 with "Show queue history".
+        final start = Services.i.settings.showQueueHistory ? (pos - 25).clamp(0, pos) : pos + 1;
+        final rest = items.length - start.clamp(0, items.length);
+        const label = TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w700);
+        final from = p.playingFrom.value;
+        // 1.4.5: a party guest sees the host's next songs; with autoplay on
+        // the queue is never "Nothing next" (a loading row while they come).
+        final party = p.partyUpNext.value;
+        final upcoming = rest - (start <= pos ? pos - start + 1 : 0);
+        final autoplay = Services.i.settings.autoplay && cur != null && !cur.isLocal;
+        final firstNext = pos + 1 < items.length ? items[pos + 1] : null;
+        final String heading;
+        if (party != null) {
+          heading = 'Next in the party';
+        } else if (upcoming <= 0 && rest <= 0) {
+          heading = autoplay ? 'Similar songs next' : 'Nothing next';
+        } else if (from == null && firstNext != null && p.isRadioPick(firstNext.id)) {
+          heading = 'Similar songs next';
+        } else {
+          heading = from == null ? 'Next up' : 'Next from: $from';
+        }
+        final showLoading = party != null ? party.isEmpty : (upcoming <= 0 && autoplay);
+        if (showLoading && party == null) WidgetsBinding.instance.addPostFrameCallback((_) => p.topUpRadio());
+        return CustomScrollView(
+          slivers: [
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 8, 20, 6),
+                child: Text(
+                  'Queue',
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+            if (cur != null) ...[
               const SliverToBoxAdapter(
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 8, 20, 6),
-                  child: Text(
-                    'Queue',
-                    style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800),
-                  ),
+                  padding: EdgeInsets.fromLTRB(20, 4, 20, 2),
+                  child: Text('Now playing', style: label),
                 ),
               ),
-              if (cur != null) ...[
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 4, 20, 2),
-                    child: Text('Now playing', style: label),
-                  ),
-                ),
-                SliverToBoxAdapter(child: _QueueRow(item: cur, playing: true)),
-              ],
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 2),
-                  child: Text(rest <= 0 ? 'Nothing next' : (from == null ? 'Next up' : 'Next from: $from'), style: label),
-                ),
-              ),
-              if (rest > 0)
-                SliverReorderableList(
-                  itemCount: rest,
-                  onReorderItem: (a, b) => p.moveQueueItem(a + start, b + start),
-                  itemBuilder: (c, row) {
-                    final i = row + start;
-                    final it = items[i];
-                    return Dismissible(
-                      key: ValueKey('q-${it.id}-$i'),
-                      direction: DismissDirection.endToStart,
-                      onDismissed: (_) => p.removeFromQueue(i),
-                      background: Container(
-                        color: Colors.red.withValues(alpha: 0.3),
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 20),
-                        child: const Icon(Icons.delete_outline_rounded),
-                      ),
-                      child: Opacity(
-                        opacity: i < pos ? 0.5 : 1,
-                        child: _QueueRow(item: it, index: i, row: row),
-                      ),
-                    );
-                  },
-                ),
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              SliverToBoxAdapter(child: _QueueRow(item: cur, playing: true)),
             ],
-          );
-        },
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 2),
+                child: Row(
+                  children: [
+                    Flexible(child: Text(heading, maxLines: 1, overflow: TextOverflow.ellipsis, style: label)),
+                    if (party == null && autoplay && heading == 'Similar songs next') ...[
+                      const SizedBox(width: 6),
+                      const Icon(Icons.all_inclusive_rounded, size: 15, color: Colors.white60),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            if (party != null)
+              SliverList.builder(
+                itemCount: party.length,
+                itemBuilder: (c, i) => _QueueRow(item: party[i], readOnly: true),
+              )
+            else if (rest > 0)
+              SliverReorderableList(
+                itemCount: rest,
+                onReorderItem: (a, b) => p.moveQueueItem(a + start, b + start),
+                itemBuilder: (c, row) {
+                  final i = row + start;
+                  final it = items[i];
+                  return Dismissible(
+                    key: ValueKey('q-${it.id}-$i'),
+                    direction: DismissDirection.endToStart,
+                    onDismissed: (_) => p.removeFromQueue(i),
+                    background: Container(
+                      color: Colors.red.withValues(alpha: 0.3),
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      child: const Icon(Icons.delete_outline_rounded),
+                    ),
+                    child: Opacity(
+                      opacity: i < pos ? 0.5 : 1,
+                      child: _QueueRow(item: it, index: i, row: row),
+                    ),
+                  );
+                },
+              ),
+            if (showLoading)
+              SliverToBoxAdapter(
+                child: _QueueLoadingRow(text: party != null ? 'Getting the host\'s next songs…' : 'Finding similar songs…'),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// "Finding similar songs…" while up next is on its way.
+class _QueueLoadingRow extends StatelessWidget {
+  final String text;
+  const _QueueLoadingRow({required this.text});
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return Padding(
+      key: const ValueKey('queue-loading'),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 46,
+            height: 46,
+            child: Center(
+              child: reduce
+                  ? const Icon(Icons.hourglass_empty_rounded, color: Colors.white54, size: 20)
+                  : const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+          ),
+        ],
       ),
     );
   }
@@ -1511,7 +1592,8 @@ class _QueueRow extends StatelessWidget {
   final bool playing;
   final int? index; // position in the play order
   final int? row; // row in the reorderable list
-  const _QueueRow({required this.item, this.playing = false, this.index, this.row});
+  final bool readOnly; // the host's list on a party guest
+  const _QueueRow({required this.item, this.playing = false, this.index, this.row, this.readOnly = false});
   @override
   Widget build(BuildContext context) {
     final p = Services.i.player;
@@ -1559,6 +1641,8 @@ class _QueueRow extends StatelessWidget {
                   padding: EdgeInsets.symmetric(horizontal: 8),
                   child: Icon(Icons.graphic_eq_rounded, color: Colors.white),
                 )
+              else if (readOnly)
+                const SizedBox(width: 12)
               else
                 IconButton(
                   tooltip: 'Remove from queue',

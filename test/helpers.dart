@@ -166,6 +166,12 @@ class FakeJustAudio extends JustAudioPlatform with MockPlatformInterfaceMixin {
 
 class FakePlayerPlatform extends AudioPlayerPlatform {
   final FakeJustAudio owner;
+
+  /// 1.4.5: report an Android audio session per platform player, like the
+  /// phone (a deck that is stopped and loaded again gets a new one).
+  static bool androidSessions = false;
+  static int _nextSession = 100;
+  final int session = ++_nextSession;
   final _events = StreamController<PlaybackEventMessage>.broadcast();
   final _data = StreamController<PlayerDataMessage>.broadcast();
   String? uri;
@@ -193,7 +199,7 @@ class FakePlayerPlatform extends AudioPlayerPlatform {
         duration: duration,
         icyMetadata: null,
         currentIndex: 0,
-        androidAudioSessionId: null,
+        androidAudioSessionId: androidSessions ? session : null,
       ),
     );
   }
@@ -234,6 +240,31 @@ class FakePlayerPlatform extends AudioPlayerPlatform {
   }
 
   int _errors = 0;
+
+  /// 1.4.5: the backend reports a wrong position for a moment (desktop: a
+  /// coarse or briefly-zero position) while the sound carries on.
+  void reportPosition(Duration p) {
+    _events.add(
+      PlaybackEventMessage(
+        processingState: state,
+        updateTime: DateTime.now(),
+        updatePosition: p,
+        bufferedPosition: duration ?? Duration.zero,
+        duration: duration,
+        icyMetadata: null,
+        currentIndex: 0,
+        androidAudioSessionId: null,
+      ),
+    );
+  }
+
+  /// The stream comes back after [stallNow].
+  void resumeNow() {
+    state = ProcessingStateMessage.ready;
+    _at = DateTime.now();
+    _emit();
+    _schedule();
+  }
 
   /// The stream hangs mid-song: buffering forever, no error.
   void stallNow() {

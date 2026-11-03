@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audio_service/audio_service.dart' show AudioProcessingState;
 import 'package:flutter/foundation.dart';
 
 import '../core/models.dart';
@@ -7,14 +8,11 @@ import '../data/listen_together.dart';
 import 'byte_handler.dart';
 
 /// Lets Listen together drive (and watch) Byte's real player.
-class HandlerSyncPlayer implements SyncPlayer {
+class HandlerSyncPlayer implements SyncPlayer, PartyClockPlayer {
   final ByteAudioHandler h;
   final ValueNotifier<int> _changes = ValueNotifier(0);
   final List<StreamSubscription> _subs = [];
   bool? _lastPlaying;
-  int _lastPosMs = 0;
-  DateTime _lastAt = DateTime.now();
-  String? _lastId;
 
   HandlerSyncPlayer(this.h) {
     h.current.addListener(_bump);
@@ -22,6 +20,9 @@ class HandlerSyncPlayer implements SyncPlayer {
       // Real sound, not the lock screen's "playing": during the pause between
       // songs (1.4.5) the party hears the next song start when the host's does.
       h.playbackState.listen((_) {
+        final st = stalled;
+        if (st && !_wasStalled) stallCount++;
+        _wasStalled = st;
         final now = h.audible;
         if (now != _lastPlaying) {
           _lastPlaying = now;
@@ -29,28 +30,41 @@ class HandlerSyncPlayer implements SyncPlayer {
         }
       }),
     );
-    // A jump in position that normal playback can't explain = a seek.
-    _subs.add(
-      Stream.periodic(const Duration(milliseconds: 500)).listen((_) {
-        final now = DateTime.now();
-        final pos = h.position.inMilliseconds;
-        // A new song starts at 0:00: that's not a seek.
-        final id = h.current.value?.id;
-        if (id != _lastId) {
-          _lastId = id;
-          _lastPosMs = pos;
-          _lastAt = now;
-          return;
-        }
-        final expected = _lastPosMs + (h.audible ? now.difference(_lastAt).inMilliseconds : 0);
-        if ((pos - expected).abs() > 1500 && h.current.value != null) _bump();
-        _lastPosMs = pos;
-        _lastAt = now;
-      }),
-    );
+    // 1.4.5: a seek is the player saying it seeked, not a position jump
+    // (a desktop host's coarse or briefly-zero position looked like a seek
+    // and pulled every guest back: the "part of the song repeats" bug).
+    h.seeks.addListener(_bump);
   }
 
   void _bump() => _changes.value++;
+
+  bool _wasStalled = false;
+
+  // ── 1.4.5 party clock ─────────────────────────────────────────────────
+  @override
+  int stallCount = 0;
+
+  /// Meant to play, but the stream is buffering (no sound, position frozen).
+  @override
+  bool get stalled {
+    if (h.remote != null || h.inGap || !h.audible) return false;
+    final ps = h.playbackState.value.processingState;
+    return ps == AudioProcessingState.buffering || ps == AudioProcessingState.loading;
+  }
+
+  @override
+  Future<void> setRate(double r) => h.setPartyRate(r);
+
+  @override
+  Item? get upNext => h.queueModel.nextItem;
+
+  @override
+  int? get startsInMs {
+    final at = h.gapEndsAt;
+    if (at == null || !h.inGap) return null;
+    final ms = at.difference(DateTime.now()).inMilliseconds;
+    return ms < 0 ? 0 : ms;
+  }
 
   @override
   Listenable get changes => _changes;
@@ -77,6 +91,7 @@ class HandlerSyncPlayer implements SyncPlayer {
 
   void dispose() {
     h.current.removeListener(_bump);
+    h.seeks.removeListener(_bump);
     for (final s in _subs) {
       s.cancel();
     }

@@ -9,8 +9,8 @@ import 'package:byte/ui/app_fullscreen.dart';
 import 'package:byte/ui/lyrics_view.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -57,12 +57,14 @@ void main() {
     await quiet(tester);
     expect(LyricsPane.idle.value, isTrue);
     expect(win.full, isTrue, reason: 'real full screen: title bar and taskbar gone');
+    expect(find.byTooltip('Close'), findsNothing, reason: 'the close arrow and handle fold away too');
     expect(AppFullscreen.active.value, isTrue);
     // a click brings the controls back but keeps the window full screen (no jumping window)
     await tester.tapAt(const Offset(200, 400));
     await tester.pump(const Duration(milliseconds: 400));
     expect(LyricsPane.idle.value, isFalse);
     expect(win.full, isTrue);
+    expect(find.byTooltip('Close'), findsOneWidget);
     // Esc: back to the normal window
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
@@ -131,5 +133,41 @@ void main() {
     expect(AppFullscreen.active.value, isTrue);
     await closeAll(tester, sv);
     expect(AppFullscreen.active.value, isFalse);
+  });
+
+  testWidgets('tablet/phone: full-screen lyrics hide the status bar and the bottom navigation bar', (tester) async {
+    final modes = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'SystemChrome.setEnabledSystemUIMode') modes.add('${call.arguments}');
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    AppFullscreen.window = AppFullscreen.platform;
+    addTearDown(() => AppFullscreen.window = win);
+    addTearDown(tester.view.reset);
+    sv.settings.lyricsAutoFullScreen = true;
+    await openPlayer(tester, sv);
+    await tester.tap(find.byTooltip('Lyrics'));
+    await tester.pump(const Duration(milliseconds: 400));
+    modes.clear();
+    await quiet(tester);
+    expect(LyricsPane.idle.value, isTrue);
+    expect(modes, ['SystemUiMode.immersiveSticky'], reason: 'status + navigation bars hidden');
+    // a tap brings the controls back; the bars stay hidden while the lyrics are up
+    await tester.tapAt(const Offset(200, 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(modes, ['SystemUiMode.immersiveSticky']);
+    // back from the background while the lyrics are up: hidden again
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(modes, ['SystemUiMode.immersiveSticky', 'SystemUiMode.immersiveSticky'], reason: 're-applied on resume');
+    await closeAll(tester, sv);
+    expect(modes.last, 'SystemUiMode.edgeToEdge', reason: 'bars back after the player closes');
   });
 }

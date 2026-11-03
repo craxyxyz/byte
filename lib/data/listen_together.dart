@@ -38,6 +38,30 @@ abstract class SyncPlayer {
   Future<void> setPlaying(bool play);
 }
 
+/// 1.4.5: what a player can add for tight party sync. Optional: a
+/// [SyncPlayer] that also implements this gets rate nudges instead of seeks,
+/// tells the party when its stream is stuck, and shares the scheduled start
+/// of the next song and what comes after it.
+abstract class PartyClockPlayer {
+  /// Meant to be playing but no sound is coming (buffering: the host's
+  /// screen went off and its net is throttled). Its position stands still.
+  bool get stalled;
+
+  /// Play a touch faster or slower (0.98–1.02) to close a small drift
+  /// without a jump; 1.0 = normal. The person's own speed is kept.
+  Future<void> setRate(double r);
+
+  /// How many times the stream has got stuck so far (counts up).
+  int get stallCount;
+
+  /// The song this phone's queue plays next (null: none / unknown).
+  Item? get upNext;
+
+  /// The next song starts by itself in this many ms (the pause between
+  /// songs); null when nothing is waiting.
+  int? get startsInMs;
+}
+
 /// The host's view of "now": song, where it is, playing or not.
 class RoomState {
   final Item? item;
@@ -50,6 +74,16 @@ class RoomState {
   final int capacity;
   final bool hostOnly;
   final String? action; // what changed, for the activity list
+  /// 1.4.5: the sender's stream is stuck (its position stands still).
+  final bool stalled;
+
+  /// 1.4.5: paused now, starts by itself at this host-clock time (the pause
+  /// between songs): every phone starts the song at the same moment.
+  final int? startAt;
+
+  /// 1.4.5: the song after this one on the host's queue, so the party can
+  /// carry on if the host goes quiet (screen off, net gone).
+  final Item? next;
   const RoomState({
     this.item,
     this.positionMs = 0,
@@ -61,6 +95,9 @@ class RoomState {
     this.capacity = 5,
     this.hostOnly = false,
     this.action,
+    this.stalled = false,
+    this.startAt,
+    this.next,
   });
   Map<String, dynamic> toJson() => {
     'i': item?.toJson(),
@@ -73,6 +110,9 @@ class RoomState {
     'cap': capacity,
     'ho': hostOnly,
     'a': ?action,
+    if (stalled) 'st': true,
+    'sa': ?startAt,
+    'nx': ?next?.toJson(),
   };
   factory RoomState.fromJson(Map m) => RoomState(
     item: m['i'] is Map ? Item.fromJson(m['i'] as Map) : null,
@@ -85,13 +125,39 @@ class RoomState {
     capacity: ((m['cap'] as num?)?.toInt() ?? 5).clamp(2, 10),
     hostOnly: m['ho'] == true,
     action: m['a'] as String?,
+    stalled: m['st'] == true,
+    startAt: (m['sa'] as num?)?.toInt(),
+    next: m['nx'] is Map ? Item.fromJson(m['nx'] as Map) : null,
   );
 
   /// Newer than [o]? (ties broken by device id so everyone agrees)
   bool newerThan(RoomState? o) => o == null || v > o.v || (v == o.v && by.compareTo(o.by) > 0 && by != o.by);
 
   /// Where the song should be at [hostNowMs] on the host's clock.
-  int expectedAt(int hostNowMs) => playing ? positionMs + max(0, hostNowMs - atMs) : positionMs;
+  int expectedAt(int hostNowMs) {
+    if (playing) return positionMs + max(0, hostNowMs - atMs);
+    final sa = startAt;
+    if (sa != null && hostNowMs >= sa) return positionMs + (hostNowMs - sa);
+    return positionMs;
+  }
+
+  /// Is the song meant to be sounding at [hostNowMs] (a scheduled start counts)?
+  bool playingAt(int hostNowMs) => playing || (startAt != null && hostNowMs >= startAt!);
+
+  /// The same state with a few things changed (this phone's own view).
+  RoomState copyWith({Item? item, int? positionMs, bool? playing, int? atMs, int? startAt, bool clearNext = false}) => RoomState(
+    item: item ?? this.item,
+    positionMs: positionMs ?? this.positionMs,
+    playing: playing ?? this.playing,
+    atMs: atMs ?? this.atMs,
+    v: v,
+    by: by,
+    byName: byName,
+    capacity: capacity,
+    hostOnly: hostOnly,
+    startAt: startAt,
+    next: clearNext ? null : next,
+  );
 }
 
 class Listener2 {
@@ -229,6 +295,23 @@ class ListenTogether extends ChangeNotifier {
   /// phone moving on by itself; only the host's phone picks what comes next.
   static const songEndWindowMs = 4000;
 
+  // ── 1.4.5 tight sync ("1% bhi lag nahi") ──────────────────────────────
+  /// Drift bigger than this is fixed with a jump (seek); smaller drift is
+  /// closed by playing a touch faster or slower for a moment.
+  static const seekLimitMs = 300;
+
+  /// Drift this small is left alone (inaudible).
+  static const nudgeDeadbandMs = 15;
+
+  /// A small drift is closed over about this long (capped at [maxNudge]).
+  static const nudgeOverMs = 1500;
+  static const maxNudge = 0.02;
+
+  /// The pause between songs (ByteAudioHandler.autoAdvanceGap): a guest
+  /// whose host has gone quiet waits this long after the song's end before
+  /// it starts the host's next song by itself.
+  static const followGapMs = 2500;
+
   ListenTogether({
     required this.player,
     required this.deviceId,
@@ -294,7 +377,6 @@ class ListenTogether extends ChangeNotifier {
   bool _beating = false;
   bool _seenHost = false;
   int _quietUntil = 0; // ignore our own player's change events until then
-  final List<int> _offsets = [];
   Set<String> _known = {};
   int _lostAt = 0; // when the connection dropped (0 = connected)
   bool _rejoining = false;
@@ -329,13 +411,24 @@ class ListenTogether extends ChangeNotifier {
     if (activity.length > maxActivity) activity.removeRange(maxActivity, activity.length);
   }
 
+  PartyClockPlayer? get _pc {
+    final p = player;
+    return p is PartyClockPlayer ? p as PartyClockPlayer : null;
+  }
+
   RoomState _snapshot({bool bump = false, String? action}) {
     final v = (last?.v ?? 0) + (bump ? 1 : 0);
+    final pc = _pc;
+    final startsIn = pc?.startsInMs;
+    final now = hostNow;
     return RoomState(
+      stalled: pc?.stalled ?? false,
+      startAt: !player.isPlaying && startsIn != null && player.item != null ? now + max(0, startsIn) : null,
+      next: pc?.upNext,
       item: player.item,
       positionMs: player.position.inMilliseconds,
       playing: player.isPlaying,
-      atMs: hostNow,
+      atMs: now,
       v: v,
       by: bump ? deviceId : (last?.by ?? deviceId),
       byName: bump ? displayName() : (last?.byName ?? displayName()),
@@ -612,10 +705,14 @@ class ListenTogether extends ChangeNotifier {
     if (!isHost && !hostAway && _atSongEnd(prev) && (it?.id != prev?.item?.id || !player.isPlaying)) {
       // Each phone's own queue would pick a different next song: the host's
       // phone decides; this one asks for it.
-      _afterEnd?.cancel();
-      _afterEnd = Timer(const Duration(milliseconds: 1500), () {
-        if (active) _send('need_state', {'from': deviceId});
-      });
+      _songEnded(prev!);
+      return;
+    }
+    if (!isHost && hostAway && _atSongEnd(prev) && _nextAfter(prev) != null) {
+      // 1.4.5: the host is away but told us what comes next: every guest
+      // plays that (at the same moment), not its own queue's pick.
+      _songEnded(prev!);
+      _followNext(prev);
       return;
     }
     String? action;
@@ -639,6 +736,7 @@ class ListenTogether extends ChangeNotifier {
     }
     final s = _snapshot(bump: true, action: action);
     last = s;
+    _setAnchor(s);
     if (action != null) _log(displayName(), action);
     notifyListeners();
     _send('state', s.toJson());
@@ -655,7 +753,46 @@ class ListenTogether extends ChangeNotifier {
       await _rejoin();
     } else if (!isHost) {
       await resync();
+    } else {
+      // 1.4.5: the host's screen comes back on: a fresh state right away
+      // (its timers may have been held back while it was off).
+      await _heartbeat();
+      if (last != null) await _send('state', _snapshot().toJson());
     }
+  }
+
+  /// The guest's song reached its end: ask the host what's next; if the host
+  /// stays quiet, play the next song it told us about, after the pause.
+  void _songEnded(RoomState prev) {
+    _endedId = prev.item?.id;
+    _afterEnd?.cancel();
+    _afterEnd = Timer(const Duration(milliseconds: 1500), () {
+      if (!active) return;
+      _send('need_state', {'from': deviceId});
+      final wait = _songEndHostMs(prev) + followGapMs - hostNow;
+      _afterEnd = Timer(Duration(milliseconds: max(0, wait) + 200), () {
+        if (active && identical(last, prev)) _followNext(prev);
+      });
+    });
+  }
+
+  /// When [s]'s song ends on the host's clock.
+  int _songEndHostMs(RoomState s) {
+    final d = s.item?.durationSec ?? 0;
+    return s.atMs + d * 1000 - s.positionMs;
+  }
+
+  /// Play the host's next song at the moment the host would have (the end
+  /// of this one + the pause). Not sent to the party: the host decides; its
+  /// next state (a newer version) wins.
+  void _followNext(RoomState prev) {
+    final nx = _nextAfter(prev);
+    if (nx == null || !active) return;
+    final s = prev.copyWith(item: nx, positionMs: 0, playing: false, atMs: hostNow, startAt: _songEndHostMs(prev) + followGapMs, clearNext: true);
+    last = s;
+    _log(hostName ?? 'Host', 'Next: "${nx.title}"');
+    notifyListeners();
+    _apply(s, force: true);
   }
 
   Future<void> _heartbeat() async {
@@ -682,20 +819,58 @@ class ListenTogether extends ChangeNotifier {
       if (_now() - _lostAt > reconnectAfter.inMilliseconds) await _rejoin();
       return;
     }
-    // Whoever made the latest change keeps everyone's clocks lined up; the
-    // host also does when it's the one playing.
-    final l = last;
-    final mine = l == null || l.by == deviceId || (isHost && player.item?.id == l.item?.id);
-    if (mine && player.item != null && (isHost || !hostAway)) {
-      final t0 = _now();
-      await _send('beat', _snapshot().toJson());
-      roundTripMs = _now() - t0;
-      notifyListeners();
+    // 1.4.5: one clock for the party: the host's (or, while the host is
+    // away, the one guest standing in for it). Everyone else measures the
+    // host's clock (ping) and follows its heartbeat.
+    if (isHost || (hostAway && _standIn)) {
+      if (player.item != null) await _sendBeat();
     } else if (!hostAway) {
-      final t0 = _now();
-      await _send('ping', {'from': deviceId, 't0': t0});
+      await _send('ping', {'from': deviceId, 't0': _now()});
     }
     if (isHost) _saveSoon();
+  }
+
+  /// The heartbeat: where this phone's song really is right now.
+  Future<void> _sendBeat() async {
+    final pc = _pc;
+    if (pc != null && pc.stalled) {
+      // Stream stuck (screen off, net throttled): say so, so guests keep
+      // their own clock instead of jumping back to a frozen position.
+      _hostSlipped = true;
+      await _send('beat', _snapshot().toJson());
+      return;
+    }
+    final a = _anchor;
+    final it = player.item;
+    if (isHost && a != null && it != null && a.item?.id == it.id && a.playingAt(hostNow) && player.isPlaying && !_applying) {
+      // The host's own sound fell behind the time it told everyone (it was
+      // stuck, or its timers were held back with the screen off): the host
+      // catches up; the guests don't get pulled back.
+      final want = a.expectedAt(hostNow);
+      final d = it.durationSec;
+      final behind = want - player.position.inMilliseconds;
+      final slipped = _hostSlipped || (pc != null && pc.stallCount != _anchorStalls);
+      if (slipped && behind > seekLimitMs && (d == null || d <= 0 || want < d * 1000 - 1000)) {
+        _applying = true;
+        try {
+          await player.seekTo(Duration(milliseconds: want));
+        } catch (_) {
+        } finally {
+          _applying = false;
+          _quietUntil = _now() + 1500;
+        }
+      }
+    }
+    _hostSlipped = false;
+    final s = _snapshot();
+    _setAnchor(s);
+    await _send('beat', s.toJson());
+  }
+
+  /// Host: the timeline it last told everyone.
+  void _setAnchor(RoomState s) {
+    _anchor = s;
+    _anchorStalls = _pc?.stallCount ?? 0;
   }
 
   void _saveSoon() {
@@ -746,22 +921,45 @@ class ListenTogether extends ChangeNotifier {
   }
 
   // ── party → this phone ────────────────────────────────────────────────
-  Future<void> _apply(RoomState s, {bool force = false, bool beat = false, bool again = false}) async {
+  RoomState? _anchor; // host: the timeline it last told everyone
+  int _anchorStalls = 0;
+  bool _hostSlipped = false;
+  String? _endedId; // guest: the song that already ended here
+  RoomState? _beatRef; // guest: the last heartbeat it trusted
+  int _lastBeatAt = 0;
+  final List<RoomState> _doubted = []; // heartbeats that went backwards
+  Timer? _startTimer;
+  Timer? _rateTimer;
+  double _rate = 1.0;
+  int _seekLagMs = 0; // how long this phone's seeks take (learned)
+
+  /// The last measured gap to the party's clock (ms, + = this phone ahead);
+  /// for the screen and the tests.
+  int? lastDriftMs;
+  (int, Item?)? _beatNext; // the host's next song as its last heartbeat said
+
+  /// What the host plays after [prev]'s song (its newest word on it).
+  Item? _nextAfter(RoomState? prev) {
+    if (prev == null) return null;
+    final b = _beatNext;
+    return b != null && b.$1 == prev.v && b.$2 != null ? b.$2 : prev.next;
+  }
+
+  Future<void> _apply(RoomState s, {bool force = false, bool again = false}) async {
     if (!active) return;
     final prev = last;
-    if (again) {
-      // the newest state, already taken in: only the player follows it now
-    } else if (!beat) {
+    if (!again) {
       if (!force && !s.newerThan(prev)) return;
       last = s;
       capacity = s.capacity;
       hostOnly = s.hostOnly;
       if (s.action != null && s.by != deviceId) _log(s.byName.isEmpty ? 'Someone' : s.byName, s.action!);
       _afterEnd?.cancel();
+      _beatRef = s;
+      _lastBeatAt = s.atMs;
+      _doubted.clear();
+      if (isHost) _setAnchor(s);
       notifyListeners();
-    } else {
-      // heartbeat: only fixes drift for the current version
-      if (prev == null || s.v != prev.v || s.item?.id != prev.item?.id) return;
     }
     final it = s.item;
     if (it == null) return;
@@ -770,19 +968,42 @@ class ListenTogether extends ChangeNotifier {
       // applied (a song end: "paused" then "next song" a few ms apart) was
       // dropped, and a paused guest ignores heartbeats, so it stayed on the
       // old song. Apply the newest state once this one is done.
-      if (!beat) _reapply = true;
+      _reapply = true;
       return;
     }
-    if (beat && !player.isPlaying) return; // paused here on purpose
     _applying = true;
     try {
-      final want = Duration(milliseconds: s.expectedAt(hostNow));
+      final now = hostNow;
+      final playNow = s.playingAt(now);
+      var want = s.expectedAt(now);
+      final d = it.durationSec;
+      final endMs = d != null && d > 0 ? d * 1000 : null;
+      // The song is over on the party's clock (or it already ended here and
+      // only its last seconds are left): never load it again. Only the host
+      // explicitly changing to it (from the start) brings it back.
+      final over = endMs != null && playNow && (want >= endMs - 1000 || (_endedId == it.id && want >= endMs - songEndWindowMs));
+      if (endMs != null) want = want.clamp(0, endMs);
       if (player.item?.id != it.id) {
-        await player.load(it, want, play: s.playing);
+        if (!over) {
+          _setRate(1);
+          final lead = playNow ? _seekLagMs : 0;
+          await player.load(it, Duration(milliseconds: want + lead), play: playNow);
+          if (_endedId == it.id) _endedId = null;
+        }
       } else {
-        if (!beat && player.isPlaying != s.playing) await player.setPlaying(s.playing);
-        final drift = (player.position.inMilliseconds - s.expectedAt(hostNow)).abs();
-        if (drift > driftLimitMs) await player.seekTo(Duration(milliseconds: s.expectedAt(hostNow)));
+        if (player.isPlaying != playNow) await player.setPlaying(playNow);
+        if (!over) {
+          final drift = player.position.inMilliseconds - s.expectedAt(hostNow);
+          if (drift.abs() > seekLimitMs) await _seek(s);
+        }
+      }
+      _startTimer?.cancel();
+      final sa = s.startAt;
+      if (!s.playing && sa != null && hostNow < sa) {
+        // The next song starts by itself at the host's moment: so does ours.
+        _startTimer = Timer(Duration(milliseconds: sa - hostNow), () {
+          if (active && identical(last, s)) _apply(s, again: true);
+        });
       }
     } catch (_) {
     } finally {
@@ -798,25 +1019,132 @@ class ListenTogether extends ChangeNotifier {
 
   bool _reapply = false;
 
-  Future<void> _syncClock() async {
-    _offsets.clear();
-    for (var i = 0; i < 3; i++) {
-      await _send('ping', {'from': deviceId, 't0': _now()});
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+  /// Jump to where [s] says the song is now (aiming a little ahead by how
+  /// long this phone's seeks take).
+  Future<void> _seek(RoomState s) async {
+    _setRate(1);
+    final t0 = _now();
+    await player.seekTo(Duration(milliseconds: s.expectedAt(hostNow) + _seekLagMs));
+    final took = _now() - t0;
+    _seekLagMs = ((_seekLagMs * 3 + took.clamp(0, 400)) / 4).round();
+  }
+
+  void _setRate(double r) {
+    _rateTimer?.cancel();
+    _rateTimer = null;
+    if (r == _rate) return;
+    _rate = r;
+    final pc = _pc;
+    if (pc != null) unawaited(pc.setRate(r).catchError((_) {}));
+  }
+
+  /// A heartbeat: where the party's song really is. Fixes drift on the
+  /// current song only; never loads a song, never pulls back to a stale or
+  /// stuck position.
+  void _onBeat(RoomState s) {
+    if (!active || isHost) return;
+    final l = last;
+    if (l == null) return;
+    if (s.v > l.v) {
+      // missed a change: take it as one
+      _apply(s);
+      return;
+    }
+    if (s.v != l.v || s.item?.id != l.item?.id || s.atMs <= _lastBeatAt) return; // old or out of order
+    if (s.stalled) {
+      // The host's stream is stuck (its screen is off): keep our own clock.
+      _lastBeatAt = s.atMs;
+      _setRate(1);
+      return;
+    }
+    final ref = _beatRef;
+    if (ref != null && ref.item?.id == s.item?.id && ref.playingAt(s.atMs) && s.playing) {
+      final predicted = ref.expectedAt(s.atMs);
+      // A host that plays normally moves on as much as its clock does; one
+      // that moved less than half of that (or jumped back) is stuck.
+      final slack = min(seekLimitMs, max(120, (s.atMs - ref.atMs) ~/ 2));
+      if (s.positionMs < predicted - slack) {
+        // The host is behind where it said it would be (stuck, or an old
+        // message): don't jump back to it. Only if it keeps a steady new
+        // clock for a few beats is that taken as the party's clock.
+        _doubted.add(s);
+        if (_doubted.length < 3 || !_steady(_doubted)) {
+          if (_doubted.length >= 3) _doubted.removeAt(0);
+          return;
+        }
+      }
+    }
+    _doubted.clear();
+    _lastBeatAt = s.atMs;
+    _beatRef = s;
+    _beatNext = (s.v, s.next); // the host's queue may have changed
+    if (player.item?.id != s.item?.id || _applying) return; // moved on at the song end, or loading
+    if (!player.isPlaying || !s.playingAt(hostNow)) return; // paused here on purpose
+    final now = hostNow;
+    final want = s.expectedAt(now);
+    final d = s.item?.durationSec;
+    if (d != null && d > 0 && want >= d * 1000 - 1000) {
+      _setRate(1); // the song is finishing: leave it be
+      return;
+    }
+    final drift = player.position.inMilliseconds - want;
+    lastDriftMs = drift;
+    if (drift.abs() > seekLimitMs) {
+      _applying = true;
+      _seek(s).catchError((_) {}).whenComplete(() {
+        _applying = false;
+        _quietUntil = _now() + 1500;
+      });
+    } else if (drift.abs() > nudgeDeadbandMs && _pc != null) {
+      // Close it smoothly: a touch slower when ahead, faster when behind.
+      final r = (1 - drift / nudgeOverMs).clamp(1 - maxNudge, 1 + maxNudge).toDouble();
+      _setRate(r);
+      final ms = (drift.abs() / (r - 1).abs()).round();
+      _rateTimer = Timer(Duration(milliseconds: ms), () => _setRate(1));
+    } else {
+      _setRate(1);
     }
   }
+
+  /// Do these heartbeats agree with each other (a clock running normally)?
+  static bool _steady(List<RoomState> b) {
+    for (var i = 1; i < b.length; i++) {
+      final slack = min(seekLimitMs, max(120, (b[i].atMs - b[i - 1].atMs) ~/ 2));
+      if ((b[i].positionMs - b[i - 1].expectedAt(b[i].atMs)).abs() > slack) return false;
+    }
+    return true;
+  }
+
+  /// NTP-style: several pings; the reply that came back fastest says the
+  /// most about the host's clock (the least time for the net to skew it).
+  Future<void> _syncClock() async {
+    for (var i = 0; i < 5; i++) {
+      await _send('ping', {'from': deviceId, 't0': _now()});
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+    }
+  }
+
+  final List<(int, int, int)> _samples = []; // (round trip, offset, when)
 
   void _onPong(Map p) {
     if (p['to'] != deviceId) return;
     final t0 = (p['t0'] as num).toInt();
     final hostClock = (p['h'] as num).toInt();
     final t3 = _now();
-    if (t3 - t0 > 3000) return;
-    roundTripMs = t3 - t0;
-    _offsets.add(hostClock - (t0 + t3) ~/ 2);
-    if (_offsets.length > 7) _offsets.removeAt(0);
-    final sorted = [..._offsets]..sort();
-    clockOffsetMs = sorted[sorted.length ~/ 2];
+    final rtt = t3 - t0;
+    if (rtt < 0 || rtt > 3000) return;
+    roundTripMs = rtt;
+    _samples.add((rtt, hostClock - (t0 + t3) ~/ 2, t3));
+    // keep the last 2 minutes / 16 samples
+    _samples.removeWhere((x) => t3 - x.$3 > 120000);
+    while (_samples.length > 16) {
+      _samples.removeAt(0);
+    }
+    var best = _samples.first;
+    for (final x in _samples) {
+      if (x.$1 < best.$1) best = x;
+    }
+    clockOffsetMs = best.$2;
     notifyListeners();
   }
 
@@ -870,7 +1198,7 @@ class ListenTogether extends ChangeNotifier {
     final ch = net.channel(c, deviceId);
     ch
       ..onBroadcast('state', (p) => _apply(RoomState.fromJson(p)))
-      ..onBroadcast('beat', (p) => _apply(RoomState.fromJson(p), beat: true))
+      ..onBroadcast('beat', (p) => _onBeat(RoomState.fromJson(p)))
       ..onBroadcast('need_state', _onNeedState)
       ..onBroadcast('ping', (p) {
         if (isHost) _send('pong', {'to': p['from'], 't0': p['t0'], 'h': _now()});
@@ -1045,6 +1373,13 @@ class ListenTogether extends ChangeNotifier {
     _dbSave?.cancel();
     _dbSave = null;
     _afterEnd?.cancel();
+    _startTimer?.cancel();
+    _setRate(1);
+    _anchor = null;
+    _beatRef = null;
+    _endedId = null;
+    _beatNext = null;
+    _doubted.clear();
     if (_listening) {
       player.changes.removeListener(_onLocalChange);
       _listening = false;

@@ -14,8 +14,15 @@ import 'listen_together.dart';
 // sharing or he leaves the party; then his own settings come back exactly.
 //
 // Messages ride the party's own live channel (no server tables):
-//   sound      host → all  {on, g, s, h, from}  g = this round of sharing
+//   sound      host → all  {on, g, s, h, from, p?}  g = this round of sharing,
+//                                                 p = the sound's name (1.4.5)
 //   sound_ack  guest → all {from, g, ok}
+// Older versions ignore message types and keys they don't know.
+//
+// 1.4.5: the prompt names the host's sound ("Bass Booster") and what this
+// device can't play; "Send now"; "Auto-accept host sound settings" (off by
+// default); a guest who said no is asked once more only when the host picks a
+// different sound, never after "Don't ask again this party".
 
 /// What the party feature needs from a Listen together party.
 abstract class PartyLink implements Listenable {
@@ -63,7 +70,20 @@ class SoundOffer {
   final int gen;
   final String hostName;
   final Map<String, Object?> sound;
-  const SoundOffer(this.gen, this.hostName, this.sound);
+
+  /// The sound's name ("Bass Booster", "Custom EQ + Reverb").
+  final String name;
+
+  /// What this device can't play of it ("reverb", "pitch").
+  final List<String> skipped;
+  const SoundOffer(this.gen, this.hostName, this.sound, {this.name = '', this.skipped = const []});
+
+  /// "Reverb and pitch can't play on this device; the rest will."
+  String? skippedLine(String place) {
+    if (skipped.isEmpty) return null;
+    final names = skipped.length == 1 ? skipped.first : '${skipped.sublist(0, skipped.length - 1).join(', ')} and ${skipped.last}';
+    return '${names[0].toUpperCase()}${names.substring(1)} can\'t play $place; the rest will.';
+  }
 }
 
 enum GuestAnswer { waiting, accepted, declined }
@@ -78,10 +98,14 @@ class PartySound extends ChangeNotifier {
   final void Function(bool on)? writeClassicEq;
   final int Function() _now;
 
+  /// What this device's player can play (1.4.5; skipped effects are named).
+  final SoundCaps Function() caps;
+
   static Duration debounce = const Duration(milliseconds: 500);
 
-  PartySound({required this.lab, required this.link, this.readClassicEq, this.writeClassicEq, int Function()? now})
-    : _now = now ?? (() => DateTime.now().millisecondsSinceEpoch) {
+  PartySound({required this.lab, required this.link, this.readClassicEq, this.writeClassicEq, int Function()? now, SoundCaps Function()? caps})
+    : _now = now ?? (() => DateTime.now().millisecondsSinceEpoch),
+      caps = caps ?? (() => AudioLabEngine.current ?? SoundBackend.forPlatform().caps) {
     link.on('sound', _onSound);
     link.on('sound_ack', _onAck);
     link.onNeedState((_) {
@@ -138,7 +162,32 @@ class PartySound extends ChangeNotifier {
   Future<void> _broadcast() async {
     final s = lab.partySound();
     _lastSent = jsonEncode(s);
-    await link.send('sound', {'on': true, 'g': gen, 's': s, 'h': _myName(), 'from': link.deviceId});
+    await link.send('sound', {'on': true, 'g': gen, 's': s, 'h': _myName(), 'p': soundName(s), 'from': link.deviceId});
+  }
+
+  /// "Send now": the host's sound goes out at once (no wait for the
+  /// debounce); turns sharing on when it was off.
+  Future<void> sendNow() async {
+    if (!link.isHost) return;
+    if (!sharing) return setSharing(true);
+    _resend?.cancel();
+    await _broadcast();
+  }
+
+  /// A short name for a lent sound: the equalizer preset, else what's on.
+  static String soundName(Map s) {
+    final eq = s['eqOn'] == true;
+    final preset = s['preset'];
+    final fx = [
+      if (s['rvOn'] == true) 'Reverb',
+      if (s['ldOn'] == true) 'Loudness',
+      if (s['xfOn'] == true) 'Crossfeed',
+      if (s['mono'] == true) 'Mono',
+    ];
+    final base = eq ? (preset is String && preset.isNotEmpty ? preset : 'Custom EQ') : null;
+    final all = [?base, ...fx];
+    if (all.isEmpty) return ((s['bal'] as num?)?.abs() ?? 0) > 0.009 || ((s['semis'] as num?) ?? 0) != 0 ? 'Custom' : 'Flat';
+    return all.take(2).join(' + ');
   }
 
   String _myName() {
@@ -178,6 +227,20 @@ class PartySound extends ChangeNotifier {
 
   bool get usingHostSound => usingGen != null;
 
+  /// The sound names he was already asked about this round (one re-ask per
+  /// new name after a no).
+  final Map<int, Set<String>> _askedNames = {};
+
+  /// "Don't ask again this party".
+  bool noMoreAsks = false;
+
+  /// The latest sound the host is sharing (to re-ask or apply live).
+  Map<String, Object?>? _latest;
+  String? _latestName;
+
+  /// What this device can't play of what he's using now.
+  List<String> get skippedNow => _latest == null ? const [] : caps().skippedIn(_latest!);
+
   void _onSound(Map p) {
     if (link.isHost || !link.active) return;
     final from = p['from'];
@@ -193,24 +256,55 @@ class PartySound extends ChangeNotifier {
     if (s is! Map) return;
     final name = (p['h'] as String?)?.trim();
     final host = (name == null || name.isEmpty) ? (link.hostName ?? 'The host') : name;
+    final sound = Map<String, Object?>.from(s);
+    final label = (p['p'] as String?)?.trim().isNotEmpty == true ? (p['p'] as String).trim() : soundName(sound);
+    _latest = sound;
+    _latestName = label;
     if (usingGen == g) {
-      lab.borrow(s); // the host changed his sound
+      lab.borrow(s); // the host changed his sound: live
       usingHost = host;
       notifyListeners();
       return;
     }
     if (usingGen != null) _stopUsing(); // a new round: back to his own until he says yes
-    if (_said.contains(g)) return;
-    offer = SoundOffer(g, host, Map<String, Object?>.from(s));
+    final asked = _askedNames.putIfAbsent(g, () => {});
+    if (_said.contains(g)) {
+      // He said no (or went back to his own): one more ask only for a sound
+      // he hasn't been asked about, and never after "Don't ask again".
+      if (noMoreAsks || asked.contains(label)) return;
+      _said.remove(g);
+    }
+    if (offer != null && offer!.gen == g) {
+      // Still on screen: show the newest sound.
+      offer = SoundOffer(g, host, sound, name: label, skipped: caps().skippedIn(sound));
+      asked.add(label);
+      notifyListeners();
+      return;
+    }
+    asked.add(label);
+    offer = SoundOffer(g, host, sound, name: label, skipped: caps().skippedIn(sound));
+    if (lab.autoAcceptPartySound) {
+      unawaited(accept());
+      return;
+    }
     notifyListeners();
   }
+
+  /// "Don't ask again this party": no now, and no more questions.
+  Future<void> declineForParty() async {
+    noMoreAsks = true;
+    await decline();
+  }
+
+  /// The name of the host's sound he's using (or was offered last).
+  String? get hostSoundName => _latestName;
 
   Future<void> accept() async {
     final o = offer;
     if (o == null) return;
     offer = null;
     _said.add(o.gen);
-    _classicWas = readClassicEq?.call();
+    _classicWas ??= readClassicEq?.call();
     lab.borrow(o.sound);
     usingGen = o.gen;
     usingHost = o.hostName;
@@ -259,6 +353,10 @@ class PartySound extends ChangeNotifier {
     _lastSent = null;
     offer = null;
     _said.clear();
+    _askedNames.clear();
+    noMoreAsks = false;
+    _latest = null;
+    _latestName = null;
     _stopUsing();
     if (had) notifyListeners();
   }

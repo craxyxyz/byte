@@ -10,6 +10,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setEnabled:(BOOL)enabled frequencies:(NSArray<NSNumber *> *)freqs gains:(NSArray<NSNumber *> *)gains;
 /// Automix bass swap: high-pass amount 0..1 for the song whose file name is [fileKey].
 + (void)setLowCut:(NSString *)fileKey amount:(float)amount;
+/// 1.4.5 Audio Lab: balance (-1 left … +1 right) and mono on every song.
++ (void)setBalance:(float)balance mono:(BOOL)mono;
 /// Starts attaching the equalizer to player items (call once at launch).
 + (void)install;
 @end

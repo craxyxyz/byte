@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:io' show File, Platform;
 
 import 'package:audio_service/audio_service.dart';
+import 'resume_point.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
@@ -56,7 +57,11 @@ const byteAudioConfig = AudioServiceConfig(
   androidNotificationChannelName: 'Music playback',
   androidNotificationChannelDescription: 'The song playing, with its controls, on the lock screen and in notifications',
   androidNotificationIcon: 'drawable/ic_stat_byte',
-  androidNotificationOngoing: true,
+  // 1.4.5 (Apurba: "song off ho phir bhi lock screen mein show karna chahiye"):
+  // paused = the notification stays with its play button and can be swiped
+  // away; the service itself stays in the foreground for 10 min after a pause
+  // (packages/audio_service/BYTE_CHANGES.md) so Android doesn't close Byte.
+  androidNotificationOngoing: false,
   androidStopForegroundOnPause: true,
   androidNotificationClickStartsActivity: true,
   androidShowNotificationBadge: false,
@@ -219,7 +224,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
   // During the pause between songs the next one waits at its start (the
   // deck may still hold the song that just ended).
-  Duration get position => inGap && !_gapLoaded ? Duration.zero : _cur.position;
+  Duration get position => _restoredAt ?? (inGap && !_gapLoaded ? Duration.zero : _cur.position);
   Duration? get duration => remote?.remoteDuration ?? _cur.duration ?? (current.value?.durationSec == null ? null : Duration(seconds: current.value!.durationSec!));
   bool get playing => remote != null ? remote!.remotePlaying : (_cur.playing || inGap);
 
@@ -246,6 +251,26 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   bool _gapLoaded = false; // its song is loaded and only waits for the timer
   bool _gapHeld = false; // paused during the gap (or loaded paused): don't start
 
+  // ── 1.4.5 party sync (listen_together.dart) ─────────────────────────
+  /// When the waiting next song starts by itself (null: not waiting).
+  DateTime? gapEndsAt;
+
+  /// Listen together closes a small drift by playing this deck a touch
+  /// faster or slower (0.98–1.02) for a moment; the person's speed setting
+  /// is kept (it's multiplied, never saved).
+  Future<void> setPartyRate(double r) async {
+    if (remote != null || _fading || _ease != null) return; // a blend owns the speed
+    try {
+      await _cur.setSpeed(settings.speed * r.clamp(0.98, 1.02));
+    } catch (_) {}
+  }
+  /// Counts real seeks (the person, the lock screen, the party). Listen
+  /// together watches this instead of guessing seeks from position jumps:
+  /// a backend whose position updates coarsely or blips to 0 (desktop) was
+  /// read as "the host seeked" and pulled every guest back.
+  final ValueNotifier<int> seeks = ValueNotifier(0);
+  // ── end party sync ───────────────────────────────────────────────────
+
   /// The next song is showing and will start by itself after the gap.
   bool get inGap => _gapToken >= 0 && _gapToken == _loadToken && !_gapHeld;
 
@@ -264,12 +289,14 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _gapLoaded = false;
     _gapHeld = held;
     _gapT = held ? null : gapTimer(d, _gapElapsed);
+    gapEndsAt = held ? null : DateTime.now().add(d); // party: shared start time
     waitingForNext.value = !held;
   }
 
   void _clearGap() {
     _gapT?.cancel();
     _gapT = null;
+    gapEndsAt = null;
     _gapToken = -1;
     _gapLoaded = false;
     _gapHeld = false;
@@ -314,6 +341,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     if (!inGap) return false;
     _gapT?.cancel();
     _gapT = null;
+    gapEndsAt = null;
     if (_gapLoaded) {
       _clearGap();
     } else {
@@ -528,7 +556,13 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     if (shuffle != null && rememberShuffle) await library.put('shuffle', shuffle);
     _queueChanged();
     await _playCurrent(startPaused: startPaused);
-    if (radio && !playable[s].isLocal) unawaited(_extendWithRadio(playable[s]));
+    if (radio && !playable[s].isLocal) {
+      _radioFails = 0;
+      _radioRetryAt = 0;
+      unawaited(_extendWithRadio(playable[s], force: true));
+    } else {
+      topUpRadio();
+    }
   }
 
   Future<void> playSong(Item it) => playItems([it], radio: true);
@@ -537,27 +571,135 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   /// null = YouTube Music's radio as it comes.
   Future<List<Item>> Function(Item seed, Set<String> exclude)? personalRadio;
 
-  Future<void> _extendWithRadio(Item seed) async {
-    if (_extendingRadio) return;
+  // ── 1.4.5 up next: with autoplay on, the queue always holds the next
+  // [radioAhead] similar songs, filled as soon as a song starts (not in its
+  // last 30 s) and topped up as they play; a failed fetch retries with a
+  // back-off. A party guest never picks: it shows the host's list. ──
+
+  /// Similar songs autoplay keeps ahead in the queue.
+  static int radioAhead = 10;
+
+  /// One fetch never holds the queue longer than this (a hung request used
+  /// to leave autoplay stuck for the rest of the session).
+  static Duration radioTimeout = const Duration(seconds: 20);
+
+  /// Fetching similar songs right now (the queue shows a loading row).
+  final ValueNotifier<bool> radioLoading = ValueNotifier(false);
+
+  /// In a party as a guest: the host's upcoming songs (empty = not here
+  /// yet). null = not a guest. A guest's own queue never picks a song.
+  final ValueNotifier<List<Item>?> partyUpNext = ValueNotifier(null);
+
+  /// A song the listener skipped by hand, and how much of it they heard
+  /// (up next learns from it).
+  void Function(Item it, int heardMs)? onUserSkip;
+
+  /// Something else keeps the queue filled right now (the DJ's set).
+  bool Function()? holdRadio;
+
+  final Set<String> _radioIds = {};
+  int _radioRetryAt = 0;
+  int _radioFails = 0;
+
+  /// Was [id] put in the queue by autoplay?
+  bool isRadioPick(String id) => _radioIds.contains(id);
+
+  /// Songs after the current one in the queue.
+  int get upcomingCount => max(0, queueModel.playOrder.length - queueModel.position - 1);
+
+  /// Autoplay should keep the queue filled here.
+  bool get radioWanted {
+    final cur = current.value;
+    return settings.autoplay && cur != null && !cur.isLocal && remote == null && partyUpNext.value == null && queueModel.repeat == q.RepeatMode.off && !(holdRadio?.call() ?? false);
+  }
+
+  /// Fills the queue up to [radioAhead] similar songs when it runs short.
+  void topUpRadio() {
+    if (!radioWanted || _extendingRadio || upcomingCount >= radioAhead) return;
+    if (DateTime.now().millisecondsSinceEpoch < _radioRetryAt) return;
+    unawaited(_extendWithRadio(current.value!));
+  }
+
+  /// A song skipped by hand within 30 s: the similar songs autoplay lined up
+  /// by the same artist go (they're found again later if loved), then refill.
+  void dropRadioLike(Item skipped) {
+    final a = skipped.artists.isEmpty ? '' : skipped.artists.first.name.trim().toLowerCase();
+    if (a.isEmpty) return;
+    final order = queueModel.playOrder;
+    var changed = false;
+    for (var i = order.length - 1; i > queueModel.position; i--) {
+      final it = order[i];
+      if (_radioIds.contains(it.id) && it.artists.any((x) => x.name.trim().toLowerCase() == a)) {
+        queueModel.removeAt(i);
+        changed = true;
+      }
+    }
+    if (changed) {
+      _preparedOnIdle = null;
+      _queueChanged();
+    }
+  }
+
+  Future<void>? _radioJob;
+
+  Future<void> _extendWithRadio(Item seed, {bool force = false}) async {
+    if (partyUpNext.value != null) return;
+    if (_extendingRadio) {
+      // the listener is waiting (Next, a song's end): let the fetch running now land
+      if (force) await _radioJob;
+      return;
+    }
+    if (!force && DateTime.now().millisecondsSinceEpoch < _radioRetryAt) return;
+    final job = Completer<void>();
+    _radioJob = job.future;
     _extendingRadio = true;
+    radioLoading.value = true;
+    var added = 0;
+    var stale = false;
     try {
       final noRepeat = settings.noRepeatInSession;
       List<Item> got = const [];
       if (personalRadio != null) {
         try {
-          got = await personalRadio!(seed, {...queueModel.originalOrder.map((i) => i.id), if (noRepeat) ...sessionSeen});
+          got = await personalRadio!(seed, {...queueModel.originalOrder.map((i) => i.id), if (noRepeat) ...sessionSeen}).timeout(radioTimeout);
         } catch (_) {}
       }
-      if (got.isEmpty) got = (await yt.next(seed.id)).queue;
+      if (got.isEmpty) got = (await yt.next(seed.id).timeout(radioTimeout)).queue;
       // "Don't repeat songs in this session": skip anything already played or suggested.
-      final add = got.where((i) => i.id != seed.id && !queueModel.contains(i.id) && !(noRepeat && sessionSeen.contains(i.id))).toList();
+      final add = <Item>[];
+      for (final i in got) {
+        if (i.id == seed.id || !i.isPlayable || queueModel.contains(i.id) || (noRepeat && sessionSeen.contains(i.id)) || add.any((x) => x.id == i.id)) continue;
+        add.add(i);
+      }
+      // the song changed while this was fetched: the picks were for another song
+      if (current.value?.id != seed.id && !force) {
+        stale = true;
+        return;
+      }
       sessionSeen.addAll(add.map((i) => i.id));
+      _radioIds.addAll(add.map((i) => i.id));
       queueModel.addAll(add);
-      _queueChanged();
-      _preparedOnIdle = null;
+      added = add.length;
+      if (add.isNotEmpty) {
+        _queueChanged();
+        _preparedOnIdle = null;
+      }
     } catch (_) {
     } finally {
       _extendingRadio = false;
+      radioLoading.value = false;
+      job.complete();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (stale) {
+        _radioRetryAt = 0;
+      } else if (added > 0) {
+        _radioFails = 0;
+        _radioRetryAt = now + 2000;
+      } else {
+        // nothing new (offline, a failed fetch): try again in 3, 6, 12 … 60 s
+        _radioFails++;
+        _radioRetryAt = now + min(60000, 3000 * (1 << min(_radioFails - 1, 5)));
+      }
     }
   }
 
@@ -660,7 +802,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       return;
     }
     if (_cur.processingState == ProcessingState.idle) {
-      await _playCurrent(startAt: _cur.position);
+      await _playCurrent(startAt: _restoredAt ?? _cur.position); // 1.4.5: restored last song resumes at its spot
       return;
     }
     final fade = pauseFadeMs();
@@ -693,6 +835,8 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> stop() async {
+    _userStopped = true; // 1.4.5: only Stop (or a swipe) takes the notification away
+    _restoredAt = null;
     _clearGap();
     _cancelFade(finishIncoming: false);
     await _cur.stop();
@@ -708,21 +852,33 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       return remote!.remoteSeek(position);
     }
     _cancelFade(finishIncoming: true);
+    if (_restoredAt != null && _cur.processingState == ProcessingState.idle) {
+      _restoredAt = position; // 1.4.5: restored, not loaded yet: remember the spot
+      clock.set(position.inMilliseconds);
+      _broadcast(_cur);
+      return;
+    }
     // Seeking in the next song during the pause between songs starts it there.
     final startNow = inGap && _gapLoaded;
     if (startNow) _clearGap();
     await _cur.seek(position);
     clock.set(position.inMilliseconds);
     if (startNow) unawaited(_cur.play());
+    seeks.value++; // party sync: a real seek (not a position glitch)
   }
 
   @override
   Future<void> skipToNext() async {
     _cancelFade(finishIncoming: true);
+    final skipped = current.value;
+    if (skipped != null && remote == null) onUserSkip?.call(skipped, inGap ? 1 << 30 : _cur.position.inMilliseconds);
     if (queueModel.next(userInitiated: true)) {
       await _playCurrent();
+    } else if (partyUpNext.value?.isNotEmpty ?? false) {
+      // a party guest: Next goes to the host's next song
+      await playItems([partyUpNext.value!.first]);
     } else if (settings.autoplay && current.value != null) {
-      await _extendWithRadio(current.value!);
+      await _extendWithRadio(current.value!, force: true);
       if (queueModel.next(userInitiated: true)) await _playCurrent();
     }
   }
@@ -847,7 +1003,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     if (queueModel.next()) {
       await _playCurrent();
     } else if (settings.autoplay && current.value != null) {
-      await _extendWithRadio(current.value!);
+      await _extendWithRadio(current.value!, force: true);
       if (queueModel.next()) await _playCurrent();
     }
     _queueChanged();
@@ -888,6 +1044,8 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> _playCurrent({Duration? startAt, Duration? afterGap, bool startPaused = false}) async {
     final it = queueModel.current;
     if (it == null) return;
+    _restoredAt = null; // 1.4.5 (resume point)
+    _userStopped = false;
     final token = ++_loadToken;
     _prepTries = 0;
     _tailFor = null;
@@ -1228,7 +1386,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       if (queueModel.next()) {
         await _playCurrent(afterGap: _gapBetween(ended, queueModel.current));
       } else if (settings.autoplay && current.value != null && !current.value!.isLocal) {
-        await _extendWithRadio(current.value!);
+        await _extendWithRadio(current.value!, force: true);
         if (queueModel.next()) {
           await _playCurrent(afterGap: _gapBetween(ended, queueModel.current));
         } else {
@@ -1245,11 +1403,13 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   // ── 4 times a second: prepare next deck, run crossfades, sleep timer ──
   Future<void> _onTick() async {
+    _maybeSaveResume(); // 1.4.5: last song + spot survive Byte being closed
     final p = _cur;
     if (p.playing) clock.set(p.position.inMilliseconds, playing: p.processingState == ProcessingState.ready, speed: p.speed);
     _watchdog(p);
     _sleepTick();
     _easeTick();
+    topUpRadio(); // 1.4.5: similar songs ahead from the song's start
     if (_fading) return; // the fade timer runs the blend
     final dur = p.duration;
     if (dur == null || !p.playing || queueModel.repeat == q.RepeatMode.one) return;
@@ -1622,19 +1782,24 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         controls: [MediaControl.skipToPrevious, if (playingNow) MediaControl.pause else MediaControl.play, MediaControl.skipToNext],
         systemActions: lockScreenActions,
         androidCompactActionIndices: const [0, 1, 2],
-        processingState: error.value != null
-            ? AudioProcessingState.error
-            : (loading.value
-                  ? AudioProcessingState.loading
-                  : const {
-                      ProcessingState.idle: AudioProcessingState.idle,
-                      ProcessingState.loading: AudioProcessingState.loading,
-                      ProcessingState.buffering: AudioProcessingState.buffering,
-                      ProcessingState.ready: AudioProcessingState.ready,
-                      ProcessingState.completed: AudioProcessingState.completed,
-                    }[p.processingState]!),
+        processingState: lockScreenState(
+          error.value != null
+              ? AudioProcessingState.error
+              : (loading.value
+                    ? AudioProcessingState.loading
+                    : const {
+                        ProcessingState.idle: AudioProcessingState.idle,
+                        ProcessingState.loading: AudioProcessingState.loading,
+                        ProcessingState.buffering: AudioProcessingState.buffering,
+                        ProcessingState.ready: AudioProcessingState.ready,
+                        ProcessingState.completed: AudioProcessingState.completed,
+                      }[p.processingState]!),
+          hasSong: current.value != null,
+          stopped: _userStopped,
+          playing: playingNow,
+        ),
         playing: playingNow,
-        updatePosition: p.position,
+        updatePosition: _restoredAt ?? p.position,
         bufferedPosition: p.bufferedPosition,
         // during the pause between songs the next one waits at 0:00
         speed: inGap && !p.playing ? 0 : p.speed,
@@ -1659,7 +1824,86 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   @override
   Future<void> onTaskRemoved() async {
     // Settings → Miscellaneous → "Stop music on close from recents".
-    if (settings.stopOnClose || !playing) await stop();
+    // 1.4.5: otherwise a paused song stays on the lock screen / notification
+    // too (it used to be stopped and vanish when Byte was swiped away).
+    saveResumePoint();
+    if (settings.stopOnClose) await stop();
+  }
+
+  // ── 1.4.5: the lock screen keeps the song; last song survives a close ──
+  // Apurba: "song off ho phir bhi lock screen mein show karna chahiye".
+  bool _userStopped = false; // Stop pressed / notification swiped
+  Duration? _restoredAt; // restored after Byte was closed, not loaded yet
+  int _resumeSavedAt = 0;
+  String? _resumeSavedId;
+  bool _resumeSavedPlaying = false;
+
+  /// The library key the resume point is kept under.
+  static const resumeKey = 'resume_point';
+
+  /// What the lock screen / notification is told. A paused song (after
+  /// Pause, at the end of the queue, a deck that went idle, or restored after
+  /// a close) is "ready, paused": Android keeps the media notification and
+  /// lock-screen controls with a play button. Only Stop gives "idle", which
+  /// removes them.
+  @visibleForTesting
+  static AudioProcessingState lockScreenState(AudioProcessingState s, {required bool hasSong, required bool stopped, required bool playing}) {
+    if (!hasSong || stopped) return s;
+    if (s == AudioProcessingState.idle) return AudioProcessingState.ready;
+    if (s == AudioProcessingState.completed && !playing) return AudioProcessingState.ready;
+    return s;
+  }
+
+  void _maybeSaveResume() {
+    final it = current.value;
+    if (it == null || remote != null || _restoredAt != null) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final pl = playing;
+    if (it.id == _resumeSavedId && pl == _resumeSavedPlaying && (!pl || now - _resumeSavedAt < 5000)) return;
+    _resumeSavedId = it.id;
+    _resumeSavedPlaying = pl;
+    _resumeSavedAt = now;
+    saveResumePoint();
+  }
+
+  /// Writes the queue, the song and its spot (Byte may be closed any time).
+  void saveResumePoint() {
+    final it = current.value;
+    if (it == null || _restoredAt != null) return;
+    try {
+      final r = ResumePoint.of(
+        queueModel.playOrder,
+        queueModel.position,
+        positionMs: inGap ? 0 : _cur.position.inMilliseconds,
+        from: playingFrom.value,
+      );
+      if (r != null) unawaited(library.put(resumeKey, r.encode()).catchError((Object _) {}));
+    } catch (_) {}
+  }
+
+  /// Opened again after Byte was closed or killed: the last song comes back
+  /// paused at its spot, on the player and the lock screen (nothing loads
+  /// until Play).
+  Future<bool> restoreLast() async {
+    if (current.value != null || remote != null) return false;
+    final r = ResumePoint.decode(library.get(resumeKey));
+    if (r == null || r.items.isEmpty) return false;
+    final playable = r.items.where((i) => i.isPlayable).toList();
+    if (playable.isEmpty) return false;
+    final at = r.index.clamp(0, playable.length - 1);
+    queueModel.load(playable, start: at, shuffle: false);
+    final it = queueModel.current;
+    if (it == null) return false;
+    _userStopped = false;
+    _restoredAt = Duration(milliseconds: r.positionMs);
+    playingFrom.value = r.from;
+    current.value = it;
+    _queueChanged();
+    clock.set(r.positionMs, playing: false);
+    _publish(mediaItemFor(it));
+    _publishArt(it);
+    _broadcast(_cur);
+    return true;
   }
 
   Future<void> disposeAll() async {

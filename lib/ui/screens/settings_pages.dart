@@ -22,6 +22,7 @@ import '../lyrics_view.dart' show LyricsPane;
 import '../../player/equalizer.dart';
 import '../../services.dart';
 import '../app_icon_picker.dart';
+import '../report_problem.dart';
 import '../app_icons.dart';
 import '../dj_card.dart';
 import '../logo.dart';
@@ -1924,6 +1925,15 @@ class AboutScreen extends StatelessWidget {
                 chevron: true,
                 onTap: () =>
                     showLicensePage(context: context, applicationName: Brand.appName, applicationVersion: Brand.version, applicationLegalese: Brand.copyright),
+              ),
+              // 1.4.5: what went wrong when Byte closed by itself, to share
+              GroupRow(
+                key: const ValueKey('report-problem'),
+                icon: Icons.bug_report_outlined,
+                title: 'Report a problem',
+                subtitle: 'If Byte closed by itself, share what went wrong',
+                chevron: true,
+                onTap: () => showReportProblemSheet(context),
               ),
             ],
           ),

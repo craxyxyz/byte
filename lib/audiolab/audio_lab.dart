@@ -3,8 +3,11 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:hive_ce/hive.dart';
+
+import 'sound_backend.dart';
+
+export 'sound_backend.dart';
 
 // Byte © 2026 Apurba Laskar.
 //
@@ -270,6 +273,11 @@ class AudioLab extends ChangeNotifier {
     }
   }
 
+  /// Listen together (1.4.5): use the host's sound without being asked
+  /// (off by default). His own setting, never lent.
+  bool get autoAcceptPartySound => _g('partyAuto', false);
+  set autoAcceptPartySound(bool v) => _s('partyAuto', v);
+
   // ── Equalizer ──
   bool get eqOn => _g('eqOn', false);
   set eqOn(bool v) => _s('eqOn', v);
@@ -482,45 +490,68 @@ class AudioLab extends ChangeNotifier {
   }
 }
 
-/// Sends the Audio Lab to the phone's sound processor for every player.
+/// Sends the Audio Lab to this device's sound processor for every player.
+///
+/// 1.4.5: on Android each song can play on a new player session (a deck that
+/// is stopped and loaded again gets a fresh one), so the engine follows each
+/// deck's session: the new one gets the effects at once and the old one's are
+/// released. Before, old sessions were never released, so after a while the
+/// phone refused to make effects for new ones and later songs played dry.
 class AudioLabEngine {
-  static const _ch = MethodChannel('byte/audiolab');
   final AudioLab lab;
+  final SoundBackend backend;
   final Set<int> _sessions = {};
+  final Map<int, int?> _deckSession = {};
   Timer? _debounce;
-  AudioLabEngine(this.lab) {
+  AudioLabEngine(this.lab, {SoundBackend? backend}) : backend = backend ?? SoundBackend.forPlatform() {
     lab.addListener(_changed);
   }
 
-  /// What this phone can do (filled on start).
-  Map<String, Object?> caps = const {};
+  /// What this device can do (filled on start).
+  SoundCaps get caps => backend.caps;
+
+  /// The device's sound processor, for screens that only read caps.
+  static SoundCaps? current;
 
   Future<void> start() async {
-    if (kIsWeb) return;
-    try {
-      caps = Map<String, Object?>.from((await _ch.invokeMethod<Map>('caps')) ?? const {});
-    } catch (_) {}
+    await backend.start();
+    current = caps;
     await push();
   }
 
-  Future<void> attach(int? session) async {
-    if (kIsWeb || session == null || session <= 0 || !_sessions.add(session)) return;
-    try {
-      await _ch.invokeMethod('attach', {'session': session});
-      await push();
-    } catch (_) {}
+  /// Follow each player's session ([decks] = each deck's session stream).
+  List<StreamSubscription<int?>> watch(List<Stream<int?>> decks) => [
+    for (var i = 0; i < decks.length; i++) decks[i].listen((s) => unawaited(deckSession(i, s))),
+  ];
+
+  /// Deck [deck] now plays on [session] (Android audio session id).
+  Future<void> deckSession(int deck, int? session) async {
+    if (session == null || session <= 0) return;
+    final old = _deckSession[deck];
+    _deckSession[deck] = session;
+    if (old == session) return;
+    await attach(session);
+    if (old != null && !_deckSession.values.contains(old)) await _detach(old);
   }
+
+  Future<void> attach(int? session) async {
+    if (session == null || session <= 0 || !_sessions.add(session)) return;
+    await backend.attach(session);
+    await push();
+  }
+
+  Future<void> _detach(int session) async {
+    if (!_sessions.remove(session)) return;
+    await backend.detach(session);
+  }
+
+  /// Sessions with effects right now (tests).
+  Set<int> get sessions => {..._sessions};
 
   void _changed() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 30), push);
   }
 
-  Future<void> push() async {
-    if (kIsWeb) return;
-    final c = lab.nativeConfig();
-    try {
-      await _ch.invokeMethod('config', {...c, 'reverb': AudioLab.reverbNative(c)});
-    } catch (_) {}
-  }
+  Future<void> push() => backend.apply(lab, lab.nativeConfig());
 }

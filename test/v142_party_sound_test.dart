@@ -350,14 +350,15 @@ void main() {
       expect(find.textContaining('wants to share'), findsNothing);
       await tester.runAsync(() => p.hostSound.setSharing(true));
       await tester.pump();
-      expect(find.text('Apurba wants to share their sound'), findsOneWidget);
-      expect(find.text('Accept'), findsOneWidget);
-      expect(find.text('Decline'), findsOneWidget);
-      await tester.tap(find.text('Accept'));
+      // 1.4.5 wording: names the sound; Apply / Keep mine.
+      expect(find.text('Apurba wants to share their sound settings (Custom EQ + Reverb)'), findsOneWidget);
+      expect(find.text('Apply'), findsOneWidget);
+      expect(find.text('Keep mine'), findsOneWidget);
+      await tester.tap(find.text('Apply'));
       await tester.pump();
       expect(find.text("Using Apurba's sound"), findsOneWidget);
-      expect(find.text('Turn off'), findsOneWidget);
-      await tester.tap(find.text('Turn off'));
+      expect(find.text('Use my own sound'), findsOneWidget);
+      await tester.tap(find.text('Use my own sound'));
       await tester.pump();
       expect(find.textContaining('Using'), findsNothing);
       expect(p.guestLabs[0].borrowing, isFalse);
@@ -369,7 +370,7 @@ void main() {
       await tester.pumpWidget(wrap(PartySoundSection(sound: p.guestSounds[0])));
       await tester.runAsync(() => p.hostSound.setSharing(true));
       await tester.pump();
-      await tester.tap(find.text('Decline'));
+      await tester.tap(find.text('Keep mine'));
       await tester.pump();
       expect(find.textContaining('wants to share'), findsNothing);
       expect(jsonEncode(p.guestLabs[0].debugAll), before);
@@ -378,7 +379,7 @@ void main() {
     testWidgets('the host has the switch and sees who accepted', (tester) async {
       final p = Party(3);
       await tester.pumpWidget(wrap(PartySoundSection(sound: p.hostSound)));
-      expect(find.text('Share my sound with guests'), findsOneWidget);
+      expect(find.text('Share my sound settings with guests'), findsOneWidget);
       expect(find.textContaining('Not speed'), findsOneWidget);
       await tester.tap(find.byType(ByteSwitch));
       await tester.pump();
@@ -391,7 +392,7 @@ void main() {
       await tester.pump();
       expect(find.text('Sharing with 2 of 3 guests'), findsOneWidget);
       expect(find.text('Using your sound'), findsNWidgets(2));
-      expect(find.text('Said no'), findsOneWidget);
+      expect(find.text('Kept theirs'), findsOneWidget);
       expect(find.byIcon(Icons.check_circle_rounded), findsNWidgets(2));
     });
 

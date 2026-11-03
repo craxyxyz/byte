@@ -7,6 +7,7 @@
 // the connection comes back. Optionally the saved-room table too.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:byte/core/models.dart';
 import 'package:byte/data/listen_together.dart';
@@ -21,6 +22,16 @@ class FakePartyBus {
   final Map<String, Map<String, Map>> _presence = {}; // topic → key → payload
   final Map<String, Map<String, dynamic>> rooms = {}; // code → row
   final List<String> sent = []; // "event from key" log
+
+  /// 1.4.5: one-way delay of every message (ms) and ± random jitter on top.
+  /// Messages from one phone to another still arrive in order (one socket).
+  int latencyMs = 5;
+  int jitterMs = 0;
+  final Random rng = Random(7);
+  final Map<String, int> _lastDue = {};
+
+  /// Per receiving phone: an extra one-way delay (a far-away phone).
+  final Map<String, int> extraLatency = {};
 
   List<Map> presenceOf(String topic) => [...?_presence[topic]?.values];
 
@@ -49,7 +60,13 @@ class FakePartyBus {
     final wire = jsonEncode(payload);
     for (final o in [...?_subs[from.topic]]) {
       if (identical(o, from) || o.net.halfOpen) continue; // self: false
-      Timer(const Duration(milliseconds: 5), () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final j = jitterMs <= 0 ? 0 : rng.nextInt(jitterMs * 2 + 1) - jitterMs;
+      final pair = '${from.key}>${o.key}';
+      var due = now + max<int>(0, latencyMs + (extraLatency[o.key] ?? 0) + (extraLatency[from.key] ?? 0) + j);
+      due = max<int>(due, (_lastDue[pair] ?? 0) + 1);
+      _lastDue[pair] = due;
+      Timer(Duration(milliseconds: due - now), () {
         if (o._joined && !o.net.halfOpen) o._deliver(event, jsonDecode(wire) as Map);
       });
     }
@@ -259,7 +276,7 @@ class FakePartyChannel implements PartyChannel {
 }
 
 /// A pretend player: user actions fire [changes]; the party drives it too.
-class FakeSyncPlayer implements SyncPlayer {
+class FakeSyncPlayer implements SyncPlayer, PartyClockPlayer {
   final String name;
   FakeSyncPlayer(this.name);
   @override
@@ -273,8 +290,97 @@ class FakeSyncPlayer implements SyncPlayer {
   Listenable get changes => _changes;
   @override
   bool get isPlaying => playing;
+  /// The stream stalled (buffering: net throttled with the screen off) while
+  /// the player still says "playing": the position stands still.
+  int? _frozenMs;
+  void stall() {
+    _frozenMs = position.inMilliseconds;
+    stallCount++;
+  }
+
   @override
-  Duration get position => Duration(milliseconds: playing ? _posMs + DateTime.now().millisecondsSinceEpoch - _at : _posMs);
+  int stallCount = 0;
+  @override
+  Item? upNext;
+
+  /// Paused in the pause between songs: starts by itself in this many ms.
+  int? _startsIn;
+  @override
+  int? get startsInMs {
+    final u = _gapUntil;
+    if (u != null) return max(0, u - DateTime.now().millisecondsSinceEpoch);
+    return _startsIn;
+  }
+
+  set startsInMs(int? v) => _startsIn = v;
+  void unstall() {
+    final f = _frozenMs;
+    if (f == null) return;
+    _frozenMs = null;
+    _mark(f);
+  }
+
+  /// An older Byte that doesn't tell the party its stream is stuck.
+  bool hideStall = false;
+  @override
+  bool get stalled => !hideStall && _frozenMs != null;
+
+  /// How long a load takes (a slow network); 0 = instant.
+  int loadDelayMs = 0;
+
+  /// The song ended on its own: the next one shows, waits [gapMs], then
+  /// starts by itself (ByteAudioHandler's pause between songs).
+  Timer? _gap;
+  void gapTo(Item next, {int gapMs = 2500}) {
+    _gap?.cancel();
+    item = next;
+    playing = false;
+    _mark(0);
+    startsInMs = gapMs;
+    final until = DateTime.now().millisecondsSinceEpoch + gapMs;
+    _gapUntil = until;
+    _changes.value++;
+    _gap = Timer(Duration(milliseconds: gapMs), () {
+      startsInMs = null;
+      _gapUntil = null;
+      playing = true;
+      _mark(0);
+      _changes.value++;
+    });
+  }
+
+  int? _gapUntil;
+
+  /// This phone's audio clock runs a little fast or slow (1.0 = exact).
+  double clockRate = 1.0;
+
+  /// Playback-rate nudges the party asks for (sync without seeking).
+  double rate = 1.0;
+  final List<double> rates = [];
+
+  /// A backend whose position only updates every this many ms (desktop's
+  /// throttled position stream); 0 = smooth. The sound itself is smooth.
+  int coarseMs = 0;
+
+  /// Until then the backend reports 0:00 (a blip after a seek or buffering).
+  int blipZeroUntil = 0;
+
+  /// What the sound really is at (for measuring), whatever is reported.
+  Duration get truePosition {
+    final f = _frozenMs;
+    if (f != null) return Duration(milliseconds: f);
+    return Duration(milliseconds: playing ? _posMs + ((DateTime.now().millisecondsSinceEpoch - _at) * clockRate * rate).round() : _posMs);
+  }
+
+  @override
+  Duration get position {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now < blipZeroUntil) return Duration.zero;
+    final t = truePosition;
+    if (coarseMs <= 0 || !playing || _frozenMs != null) return t;
+    final e = t.inMilliseconds - _posMs;
+    return Duration(milliseconds: _posMs + e - e % coarseMs);
+  }
   void _mark(int pos) {
     _posMs = pos;
     _at = DateTime.now().millisecondsSinceEpoch;
@@ -320,6 +426,7 @@ class FakeSyncPlayer implements SyncPlayer {
   @override
   Future<void> load(Item it, Duration at, {required bool play}) async {
     log.add('load ${it.id} ${at.inMilliseconds} $play');
+    if (loadDelayMs > 0) await Future<void>.delayed(Duration(milliseconds: loadDelayMs));
     item = it;
     playing = play;
     _mark(at.inMilliseconds);
@@ -329,6 +436,14 @@ class FakeSyncPlayer implements SyncPlayer {
   Future<void> seekTo(Duration d) async {
     log.add('seek ${d.inMilliseconds}');
     _mark(d.inMilliseconds);
+  }
+
+  @override
+  Future<void> setRate(double r) async {
+    if (r == rate) return;
+    _mark(position.inMilliseconds);
+    rate = r;
+    rates.add(r);
   }
 
   @override
@@ -346,11 +461,15 @@ class Phone {
   FakePartyNet net;
   final PartyStore store;
   late ListenTogether party;
-  Phone(FakePartyBus bus, this.id, String name, {PartyStore? store})
+
+  /// This phone's wall clock is off by this much (ms) from the others'.
+  final int skewMs;
+  int _clock() => DateTime.now().millisecondsSinceEpoch + skewMs;
+  Phone(FakePartyBus bus, this.id, String name, {PartyStore? store, this.skewMs = 0})
     : player = FakeSyncPlayer(name),
       net = FakePartyNet(bus),
       store = store ?? MemoryPartyStore() {
-    party = ListenTogether(player: player, deviceId: id, displayName: () => name, net: net, store: this.store);
+    party = ListenTogether(player: player, deviceId: id, displayName: () => name, net: net, store: this.store, now: _clock);
   }
 
   /// The app was killed and opened again: same phone, same saved data, a
@@ -359,7 +478,7 @@ class Phone {
     net.kill();
     party.dispose(); // its timers die with the process
     net = FakePartyNet(bus);
-    party = ListenTogether(player: player, deviceId: id, displayName: () => name, net: net, store: store);
+    party = ListenTogether(player: player, deviceId: id, displayName: () => name, net: net, store: store, now: _clock);
   }
 }
 

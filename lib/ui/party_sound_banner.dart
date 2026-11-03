@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../data/party_sound.dart';
 import '../services.dart';
+import 'party_sound_section.dart' show partySoundAsk;
 
 class PartySoundBanner extends StatelessWidget {
   final Widget child;
@@ -82,8 +83,8 @@ class _Offer extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${offer.hostName} wants to share their sound', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-                      const Text('Their EQ, reverb and loudness, while you\'re in the party. Speed stays yours.', style: TextStyle(color: Color(0xCCFFFFFF), fontSize: 13)),
+                      Text(partySoundAsk(offer), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                      Text(offer.skippedLine(sound.caps().place) ?? 'Only while you\'re in the party. Your own sound comes back when you leave.', key: const ValueKey('party-sound-banner-note'), style: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 13)),
                     ],
                   ),
                 ),
@@ -92,9 +93,11 @@ class _Offer extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(key: const ValueKey('party-sound-banner-decline'), onPressed: sound.decline, child: const Text('Decline', style: TextStyle(color: Color(0xCCFFFFFF)))),
+                TextButton(key: const ValueKey('party-sound-banner-never'), onPressed: sound.declineForParty, child: const Text('Don\'t ask again', style: TextStyle(color: Color(0x99FFFFFF)))),
+                const Spacer(),
+                TextButton(key: const ValueKey('party-sound-banner-decline'), onPressed: sound.decline, child: const Text('Keep mine', style: TextStyle(color: Color(0xCCFFFFFF)))),
                 const SizedBox(width: 4),
-                FilledButton(key: const ValueKey('party-sound-banner-accept'), onPressed: sound.accept, child: const Text('Accept')),
+                FilledButton(key: const ValueKey('party-sound-banner-accept'), onPressed: sound.accept, child: const Text('Apply')),
               ],
             ),
           ],

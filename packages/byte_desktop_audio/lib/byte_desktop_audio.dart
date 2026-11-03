@@ -104,7 +104,13 @@ class _DesktopPlayer extends AudioPlayerPlatform {
       if (ao != null && ao.isNotEmpty) unawaited((_p!.platform as dynamic).setProperty('ao', ao) as Future<void>);
       final s = _p!.stream;
       _subs.addAll([
-        s.playing.listen((_) => _emit()),
+        s.playing.listen((_) {
+          // Paused / about to start: the song stands still, so its position
+          // is true as of now (a stale time here would make players
+          // extrapolate the pause into the song).
+          _positionAt = DateTime.now();
+          _emit();
+        }),
         s.duration.listen((d) {
           _duration = d > Duration.zero ? d : null;
           if (_duration != null && !_ready.isCompleted) _ready.complete();
@@ -123,6 +129,7 @@ class _DesktopPlayer extends AudioPlayerPlatform {
         }),
         s.position.listen((pos) {
           _position = pos;
+          _positionAt = DateTime.now();
           _emitThrottled();
         }),
         s.completed.listen((done) {
@@ -168,6 +175,9 @@ class _DesktopPlayer extends AudioPlayerPlatform {
 
   ProcessingStateMessage _state = ProcessingStateMessage.idle;
   Duration _position = Duration.zero;
+  /// When [_position] was read: an event's updateTime, so a listener that
+  /// extrapolates (position + time since) never runs ahead of the real song.
+  DateTime _positionAt = DateTime.now();
   Duration _buffered = Duration.zero;
   Duration? _duration;
   int _index = 0;
@@ -194,7 +204,7 @@ class _DesktopPlayer extends AudioPlayerPlatform {
 
   PlaybackEventMessage _event() => PlaybackEventMessage(
         processingState: _state,
-        updateTime: DateTime.now(),
+        updateTime: _positionAt,
         updatePosition: _position,
         bufferedPosition: _buffered,
         duration: _duration,
@@ -236,6 +246,7 @@ class _DesktopPlayer extends AudioPlayerPlatform {
     _index = (request.initialIndex ?? 0).clamp(0, srcs.length - 1);
     _duration = null;
     _position = request.initialPosition ?? Duration.zero;
+    _positionAt = DateTime.now();
     _buffered = Duration.zero;
     _state = ProcessingStateMessage.loading;
     _ready = Completer<void>();
@@ -347,6 +358,7 @@ class _DesktopPlayer extends AudioPlayerPlatform {
     final pos = request.position ?? Duration.zero;
     await p.seek(pos);
     _position = pos;
+    _positionAt = DateTime.now();
     if (_state == ProcessingStateMessage.completed) _state = ProcessingStateMessage.ready;
     _emit();
     return SeekResponse();

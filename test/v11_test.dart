@@ -153,13 +153,14 @@ void main() {
       final album = await sv.yt.album('MPREb_E4GfUXfDfhy');
       await sv.player.playSong(album.tracks[0]);
       await pumpEventQueue(times: 50);
-      final first = sv.player.queueModel.playOrder.length;
-      expect(first, greaterThan(1), reason: 'radio added songs');
+      final firstIds = sv.player.queueModel.playOrder.map((i) => i.id).toList();
+      expect(firstIds.length, greaterThan(1), reason: 'radio added songs');
       await sv.player.playSong(album.tracks[1]);
       await pumpEventQueue(times: 50);
       final again = sv.player.queueModel.playOrder.map((i) => i.id).toList();
-      // Everything the fake radio offers was already suggested once.
-      expect(again.length, lessThan(first));
+      // 1.4.5: up next has more sources than the song's radio, so the second
+      // radio isn't simply shorter; nothing suggested once comes back.
+      expect(again.skip(1).where(firstIds.contains), isEmpty);
       await sv.player.stop();
     });
 

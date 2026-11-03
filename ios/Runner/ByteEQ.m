@@ -21,6 +21,19 @@ static float gGain[BYTE_EQ_MAX_BANDS];
 static atomic_int gBands = 0;
 static atomic_int gEnabled = 0;
 static atomic_int gVersion = 1;
+// 1.4.5 Audio Lab: balance (-1000 left … +1000 right) and mono.
+static atomic_int gBalanceMilli = 0;
+static atomic_int gMono = 0;
+static inline void channelStage(float *l, float *r, float gl, float gr, int mono) {
+  float a = *l, b = *r;
+  if (mono) {
+    float m = 0.5f * (a + b);
+    a = m;
+    b = m;
+  }
+  *l = a * gl;
+  *r = b * gr;
+}
 
 // Automix bass swap: a high-pass filter on one song (found by its file name)
 // swept up while the next song comes in. Up to 4 songs at once.
@@ -190,7 +203,12 @@ static void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MT
   int hpOn = s->hpAmount > 0;
   if (eqOn && s->version != atomic_load(&gVersion)) computeCoefficients(s);
   int eqRun = eqOn && s->bands > 0;
-  if (!eqRun && !hpOn) return;
+  int balMilli = atomic_load(&gBalanceMilli);
+  int monoOn = atomic_load(&gMono);
+  float bal = balMilli / 1000.0f;
+  float gl = bal > 0 ? 1.0f - bal : 1.0f, gr = bal < 0 ? 1.0f + bal : 1.0f;
+  int chRun = monoOn || balMilli != 0;
+  if (!eqRun && !hpOn && !chRun) return;
   float pre = eqRun ? s->preamp : 1.0f;
   CMItemCount frames = *numberFramesOut;
   for (UInt32 bi = 0; bi < bufferListInOut->mNumberBuffers; bi++) {
@@ -208,6 +226,7 @@ static void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MT
           if (hpOn) v = runHighPass(s, c, v);
           *p = v;
         }
+        if (chRun && buf->mNumberChannels == 2) channelStage(&d[f * 2], &d[f * 2 + 1], gl, gr, monoOn);
       }
     } else {
       int c = (int)bi < BYTE_EQ_MAX_CH ? (int)bi : BYTE_EQ_MAX_CH - 1;
@@ -217,6 +236,13 @@ static void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MT
         if (hpOn) v = runHighPass(s, c, v);
         d[f] = v;
       }
+    }
+  }
+  // Non-interleaved stereo: left and right are two buffers.
+  if (chRun && !s->interleaved && bufferListInOut->mNumberBuffers == 2) {
+    float *l = (float *)bufferListInOut->mBuffers[0].mData, *r = (float *)bufferListInOut->mBuffers[1].mData;
+    if (l && r) {
+      for (CMItemCount f = 0; f < frames; f++) channelStage(&l[f], &r[f], gl, gr, monoOn);
     }
   }
 }
@@ -329,4 +355,8 @@ static id byteInitWithItem(id self, SEL _cmd, AVPlayerItem *item) {
   atomic_store(&gCutKey[freeSlot], key);
 }
 
++ (void)setBalance:(float)balance mono:(BOOL)mono {
+  atomic_store(&gBalanceMilli, (int)lroundf(fmaxf(-1.0f, fminf(1.0f, balance)) * 1000.0f));
+  atomic_store(&gMono, mono ? 1 : 0);
+}
 @end

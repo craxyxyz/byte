@@ -463,10 +463,13 @@ class PlayerContextLine extends StatelessWidget {
     final p = Services.i.player;
     return ValueListenableBuilder<String?>(
       valueListenable: p.playingFrom,
-      builder: (context, from, _) => ValueListenableBuilder<int>(
-        valueListenable: p.queueVersion,
-        builder: (context, _, _) {
-          final next = p.queueModel.position + 1 < p.queueModel.playOrder.length ? p.queueModel.playOrder[p.queueModel.position + 1] : null;
+      builder: (context, from, _) => AnimatedBuilder(
+        animation: Listenable.merge([p.queueVersion, p.partyUpNext]),
+        builder: (context, _) {
+          final party = p.partyUpNext.value;
+          final next = party != null
+              ? (party.isEmpty ? null : party.first)
+              : (p.queueModel.position + 1 < p.queueModel.playOrder.length ? p.queueModel.playOrder[p.queueModel.position + 1] : null);
           final text = from ?? (next != null ? 'Next: ${next.title}' : (Services.i.settings.autoplay ? 'Similar songs next' : 'End of queue'));
           return InkWell(
             borderRadius: BorderRadius.circular(8),

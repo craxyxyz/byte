@@ -4,11 +4,12 @@
 // kuch nahi dikhna chahiye, full screen lyrics hoga". Full-screen lyrics put
 // the whole window in real full screen: on a computer the title bar and the
 // taskbar / dock / menu bar go; on the web the browser's own full screen; on
-// a phone the player's existing immersive mode stays as it was.
+// a phone or tablet the status and navigation bars are hidden (immersive).
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 
 import 'app_fullscreen_stub.dart' if (dart.library.js_interop) 'app_fullscreen_web.dart' as web;
 
@@ -28,8 +29,13 @@ class _PlatformFullscreen implements WindowFullscreen {
     if (desktop) {
       final hook = AppFullscreen.desktopHook;
       if (hook != null) await hook(on);
+      return;
     }
-    // Phones and tablets keep the player's own immersive mode.
+    // Phones and tablets (1.4.5, Apurba on his tablet: "niche jo safad baar
+    // dikha raha woh hat jayeh"): the status bar and the navigation bar at the
+    // bottom go too; a swipe from the edge shows them for a moment.
+    final keep = on || AppFullscreen.keepImmersive;
+    await SystemChrome.setEnabledSystemUIMode(keep ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge);
   }
 }
 
@@ -40,8 +46,15 @@ class AppFullscreen {
   /// build only): true = real full screen, false = back to how it was.
   static Future<void> Function(bool on)? desktopHook;
 
+  /// Phone/tablet: the player itself wants the bars hidden ("Hide status bar
+  /// in player"), so leaving full-screen lyrics keeps them hidden.
+  static bool keepImmersive = false;
+
   /// The window's full-screen switch (a fake in tests).
-  static WindowFullscreen window = _PlatformFullscreen();
+  static WindowFullscreen window = platform;
+
+  /// The real platform switch.
+  static final WindowFullscreen platform = _PlatformFullscreen();
 
   /// Is the window in full screen because of Byte right now?
   static final ValueNotifier<bool> active = ValueNotifier(false);
@@ -53,10 +66,27 @@ class AppFullscreen {
   static Future<void> exit() => _set(false);
   static Future<void> toggle() => _set(!active.value);
 
+  static AppLifecycleListener? _life;
+
+  /// Back from the background (or the bars swiped in) while still in
+  /// full-screen lyrics: hide the bars again.
+  static Future<void> reapply() async {
+    if (!active.value) return;
+    try {
+      await window.set(true);
+    } catch (_) {}
+  }
+
   static Future<void> _set(bool on) async {
     // (The browser can leave full screen by itself on Esc: ask it again.)
     if (active.value == on && !kIsWeb) return;
     active.value = on;
+    if (on) {
+      _life ??= AppLifecycleListener(onResume: () => unawaited(reapply()));
+    } else {
+      _life?.dispose();
+      _life = null;
+    }
     try {
       await window.set(on);
     } catch (_) {

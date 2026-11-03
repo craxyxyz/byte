@@ -34,6 +34,16 @@ class _LabPage extends StatelessWidget {
   );
 }
 
+/// What this device's player can really do (1.4.5): controls it can't
+/// apply are greyed out with a short note instead of doing nothing.
+SoundCaps get _caps => Services.i.labEngine?.caps ?? AudioLabEngine.current ?? SoundBackend.forPlatform().caps;
+
+/// A short grey note under a section this device can't play.
+Widget _capNote(BuildContext context, String text) => Padding(
+  padding: const EdgeInsets.fromLTRB(32, 6, 32, 0),
+  child: Text(text, style: BT.sub.copyWith(color: BytePalette.of(context).secondary, fontSize: 13)),
+);
+
 Widget _sw(String title, String? sub, bool v, ValueChanged<bool>? on, {IconData? icon, Key? key}) => GroupRow(
   key: key,
   icon: icon,
@@ -133,16 +143,17 @@ class AudioLabScreen extends StatelessWidget {
       children: (context) {
         final lab = Services.i.lab;
         final st = Services.i.settings;
+        final caps = _caps;
         final fx = [
-          if (lab.reverbOn) 'Reverb',
-          if (lab.loudOn) 'Loudness',
+          if (lab.reverbOn && caps.reverb) 'Reverb',
+          if (lab.loudOn && caps.loudness) 'Loudness',
           if (st.normalizeVolume) 'Even out',
-          if (lab.crossfeedOn) 'Crossfeed',
-          if (lab.mono) 'Mono',
+          if (lab.crossfeedOn && caps.crossfeed) 'Crossfeed',
+          if (lab.mono && caps.mono) 'Mono',
           if (st.speed != 1 || lab.pitchSemis != 0) 'Speed',
         ];
         final cards = [
-          _LabCard(const ValueKey('lab-eq'), Icons.equalizer_rounded, 'Equalizer', lab.eqOn ? 'On · ${lab.preset ?? 'Custom'}' : 'Off', () => pushPage(context, const LabEqualizerScreen())),
+          _LabCard(const ValueKey('lab-eq'), Icons.equalizer_rounded, 'Equalizer', !_caps.eq ? _caps.note : (lab.eqOn ? 'On · ${lab.preset ?? 'Custom'}' : 'Off'), () => pushPage(context, const LabEqualizerScreen())),
           _LabCard(const ValueKey('lab-fx'), Icons.auto_awesome_rounded, 'Audio effects', fx.isEmpty ? 'None on' : fx.join(' · '), () => pushPage(context, const LabEffectsScreen())),
           _LabCard(const ValueKey('lab-quality'), Icons.high_quality_rounded, 'Audio quality', 'Wi-Fi ${qualityLabel(st.wifiQuality)}', () => pushPage(context, const LabQualityScreen())),
           _LabCard(const ValueKey('lab-transition'), Icons.swap_horiz_rounded, 'Transition', _transitionLabel(), () => pushPage(context, const LabTransitionScreen())),
@@ -237,7 +248,8 @@ class _LabEqualizerScreenState extends State<LabEqualizerScreen> {
         final nodes = lab.nodes;
         if (sel != null && sel! >= nodes.length) sel = null;
         return [
-          GroupCard(children: [_sw('Equalizer', lab.eqOn ? 'On' : 'Off', lab.eqOn, (v) => lab.eqOn = v, key: const ValueKey('eq-on'))]),
+          GroupCard(children: [_sw('Equalizer', !_caps.eq ? _caps.note : (lab.eqOn ? 'On' : 'Off'), _caps.eq && lab.eqOn, _caps.eq ? (v) => lab.eqOn = v : null, key: const ValueKey('eq-on'))]),
+          if (!_caps.eq) _capNote(context, 'The player here has no equalizer hook, so this curve is kept for your phone.'),
           const SizedBox(height: 14),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -320,6 +332,8 @@ class _LabEqualizerScreenState extends State<LabEqualizerScreen> {
               ),
             ),
           const GroupLabel('Output'),
+          if (!_caps.preamp && _caps.eq) _capNote(context, 'The level is lowered automatically here so boosts never clip.'),
+          if (_caps.preamp)
           GroupCard(
             children: [
               _sw('Auto preamp', lab.autoPreamp ? 'Lowers the level by ${(-EqMath.autoPreamp(nodes)).toStringAsFixed(1)} dB so boosts never clip' : 'Nothing is lowered; the limiter catches any peaks', lab.autoPreamp, (v) => lab.autoPreamp = v),
@@ -517,18 +531,19 @@ class LabEffectsScreen extends StatelessWidget {
       final lab = Services.i.lab;
       final st = Services.i.settings;
       final info = Services.i.route.info;
+      final caps = _caps;
       String spd(double v) => '${v.toStringAsFixed(2)}×';
       return [
         const GroupLabel('Reverb'),
         GroupCard(
           children: [
-            _sw('Reverb', 'Adds space around the music', lab.reverbOn, (v) => lab.reverbOn = v, key: const ValueKey('fx-reverb')),
+            _sw('Reverb', caps.reverb ? 'Adds space around the music' : caps.note, caps.reverb && lab.reverbOn, caps.reverb ? (v) => lab.reverbOn = v : null, key: const ValueKey('fx-reverb')),
             _Chips<ReverbPreset>(ReverbPreset.values, lab.reverbPreset, (r) => switch (r) {
               ReverbPreset.room => 'Room',
               ReverbPreset.studio => 'Studio',
               ReverbPreset.bathroom => 'Bathroom',
               ReverbPreset.plate => 'Plate',
-            }, lab.reverbOn ? lab.applyReverbPreset : null),
+            }, lab.reverbOn && caps.reverb ? lab.applyReverbPreset : null),
             _Slider('Mix', lab.rv('mix'), 0, 1, _pct, (v) => lab.setRv('mix', v), enabled: lab.reverbOn),
             _Slider('Room size', lab.rv('size'), 0, 1, _pct, (v) => lab.setRv('size', v), enabled: lab.reverbOn),
             _Slider('Damping', lab.rv('damping'), 0, 1, _pct, (v) => lab.setRv('damping', v), enabled: lab.reverbOn),
@@ -541,13 +556,13 @@ class LabEffectsScreen extends StatelessWidget {
         const GroupLabel('Loudness'),
         GroupCard(
           children: [
-            _sw('Loudness', 'Louder and fuller, never clipping', lab.loudOn, (v) => lab.loudOn = v, key: const ValueKey('fx-loud')),
+            _sw('Loudness', caps.loudness ? 'Louder and fuller, never clipping' : caps.note, caps.loudness && lab.loudOn, caps.loudness ? (v) => lab.loudOn = v : null, key: const ValueKey('fx-loud')),
             _Chips<LoudMode>(LoudMode.values, lab.loudMode, (m) => switch (m) {
               LoudMode.gentle => 'Gentle',
               LoudMode.punchy => 'Punchy',
               LoudMode.night => 'Night mode',
               LoudMode.max => 'Max',
-            }, lab.loudOn ? (m) => lab.loudMode = m : null),
+            }, lab.loudOn && caps.loudness ? (m) => lab.loudMode = m : null),
             _Slider('Boost', lab.loudBoost, 0, 12, _db, (v) => lab.loudBoost = (v * 2).roundToDouble() / 2, enabled: lab.loudOn),
             _Slider('Compression', lab.loudComp, 0, 1, _pct, (v) => lab.loudComp = v, enabled: lab.loudOn),
           ],
@@ -562,8 +577,8 @@ class LabEffectsScreen extends StatelessWidget {
         const GroupLabel('Crossfeed'),
         GroupCard(
           children: [
-            _sw('Crossfeed', 'Headphones sound like speakers in a room: easier on the ears', lab.crossfeedOn, (v) => lab.crossfeedOn = v, key: const ValueKey('fx-crossfeed')),
-            _Chips<String>(const ['Headphones', 'Speakers'], lab.crossfeedSpeakers ? 'Speakers' : 'Headphones', (s) => s, lab.crossfeedOn ? (s) => lab.crossfeedSpeakers = s == 'Speakers' : null),
+            _sw('Crossfeed', caps.crossfeed ? 'Headphones sound like speakers in a room: easier on the ears' : caps.note, caps.crossfeed && lab.crossfeedOn, caps.crossfeed ? (v) => lab.crossfeedOn = v : null, key: const ValueKey('fx-crossfeed')),
+            _Chips<String>(const ['Headphones', 'Speakers'], lab.crossfeedSpeakers ? 'Speakers' : 'Headphones', (s) => s, lab.crossfeedOn && caps.crossfeed ? (s) => lab.crossfeedSpeakers = s == 'Speakers' : null),
             if (lab.crossfeedSpeakers)
               const Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, 10), child: Text('Speakers already mix both sides in the room, so crossfeed rests while this is chosen.'))
             else ...[
@@ -571,7 +586,7 @@ class LabEffectsScreen extends StatelessWidget {
                 CrossfeedStrength.light => 'Light',
                 CrossfeedStrength.natural => 'Natural',
                 CrossfeedStrength.strong => 'Strong',
-              }, lab.crossfeedOn ? (s) => lab.crossfeedStrength = s : null),
+              }, lab.crossfeedOn && caps.crossfeed ? (s) => lab.crossfeedStrength = s : null),
               _Slider('Head shadow', lab.crossfeedHz, 300, 2000, _hz, (v) => lab.crossfeedHz = v.roundToDouble(), enabled: lab.crossfeedOn),
               _Slider('Crossfeed level', lab.crossfeedDb, -15, -1, _db, (v) => lab.crossfeedDb = (v * 2).roundToDouble() / 2, enabled: lab.crossfeedOn),
               _Slider('Amount', lab.crossfeedAmount, 0, 1, _pct, (v) => lab.crossfeedAmount = v, enabled: lab.crossfeedOn),
@@ -581,21 +596,24 @@ class LabEffectsScreen extends StatelessWidget {
         const GroupLabel('Channels'),
         GroupCard(
           children: [
-            _sw('Mono audio', 'Both ears hear the whole song', lab.mono, (v) => lab.mono = v, key: const ValueKey('fx-mono')),
-            _Slider('Balance', lab.balance, -1, 1, (v) => v.abs() < 0.01 ? 'Centre' : (v < 0 ? 'L ${(-v * 100).round()}' : 'R ${(v * 100).round()}'), (v) => lab.balance = v.abs() < 0.04 ? 0 : v),
+            _sw('Mono audio', caps.mono ? 'Both ears hear the whole song' : caps.note, caps.mono && lab.mono, caps.mono ? (v) => lab.mono = v : null, key: const ValueKey('fx-mono')),
+            _Slider('Balance', caps.balance ? lab.balance : 0, -1, 1, (v) => v.abs() < 0.01 ? 'Centre' : (v < 0 ? 'L ${(-v * 100).round()}' : 'R ${(v * 100).round()}'), (v) => lab.balance = v.abs() < 0.04 ? 0 : v, enabled: caps.balance),
           ],
         ),
-        const GroupLabel('Surround'),
-        GroupCard(
-          children: [
-            GroupRow(icon: Icons.surround_sound_outlined, title: 'Atmos surround decoder', value: info.atmos ? 'On this phone' : 'Not on this phone'),
-            GroupRow(icon: Icons.spatial_audio_off_rounded, title: 'Android spatial audio', value: info.spatialAvailable ? (info.spatialEnabled ? 'On' : 'Available') : 'Not available'),
-          ],
-        ),
+        if (!caps.balance) _capNote(context, 'Balance: ${caps.note.toLowerCase()}'),
+        if (caps.surround) ...[
+          const GroupLabel('Surround'),
+          GroupCard(
+            children: [
+              GroupRow(icon: Icons.surround_sound_outlined, title: 'Atmos surround decoder', value: info.atmos ? 'On this phone' : 'Not on this phone'),
+              GroupRow(icon: Icons.spatial_audio_off_rounded, title: 'Android spatial audio', value: info.spatialAvailable ? (info.spatialEnabled ? 'On' : 'Available') : 'Not available'),
+            ],
+          ),
+        ],
         const GroupLabel('Playback speed'),
         GroupCard(
           children: [
-            _Chips<String>(const ['Normal', 'Slowed', 'Slowed + reverb'], st.speed == 1 && lab.pitchSemis == 0 ? 'Normal' : (st.speed == 0.85 && !lab.preservePitch ? (lab.reverbOn ? 'Slowed + reverb' : 'Slowed') : null), (s) => s, (s) async {
+            _Chips<String>(['Normal', if (caps.keepPitch) 'Slowed', if (caps.keepPitch && caps.reverb) 'Slowed + reverb'], st.speed == 1 && lab.pitchSemis == 0 ? 'Normal' : (st.speed == 0.85 && !lab.preservePitch ? (lab.reverbOn ? 'Slowed + reverb' : 'Slowed') : null), (s) => s, (s) async {
               if (s == 'Normal') {
                 await Services.i.player.setSpeed(1);
                 lab.preservePitch = true;
@@ -610,10 +628,11 @@ class LabEffectsScreen extends StatelessWidget {
               }
             }),
             _Slider('Speed', st.speed, 0.5, 2, spd, (v) => Services.i.player.setSpeed((v * 20).roundToDouble() / 20), divisions: 30),
-            _sw('Keep pitch', 'Off = slower songs sound deeper, the "slowed" way', lab.preservePitch, (v) => lab.preservePitch = v),
-            _Slider('Pitch', lab.pitchSemis, -12, 12, (v) => '${v > 0 ? '+' : ''}${v.round()} semitones', (v) => lab.pitchSemis = v, divisions: 24),
+            _sw('Keep pitch', caps.keepPitch ? 'Off = slower songs sound deeper, the "slowed" way' : caps.note, !caps.keepPitch || lab.preservePitch, caps.keepPitch ? (v) => lab.preservePitch = v : null),
+            _Slider('Pitch', caps.pitch ? lab.pitchSemis : 0, -12, 12, (v) => '${v > 0 ? '+' : ''}${v.round()} semitones', (v) => lab.pitchSemis = v, divisions: 24, enabled: caps.pitch),
           ],
         ),
+        if (!caps.pitch) _capNote(context, 'Pitch: ${caps.note.toLowerCase()}. Speed works everywhere.'),
       ];
     },
   );

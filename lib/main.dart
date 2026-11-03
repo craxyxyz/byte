@@ -13,6 +13,8 @@ import 'app.dart';
 import 'ui/screens/settings_pages.dart' show applyRefreshRate;
 import 'package:path_provider/path_provider.dart';
 import 'core/cover_cache.dart';
+import 'core/crash_log.dart';
+import 'brand.dart';
 import 'core/innertube.dart';
 import 'core/net.dart';
 import 'core/streams.dart';
@@ -72,6 +74,14 @@ Future<void> main() async {
   // Windows/Linux: songs play through Byte's desktop audio backend.
   ByteDesktopAudio.register();
   if (kReleaseMode) debugPrint = (String? message, {int? wrapWidth}) {};
+  // 1.4.5: uncaught errors go to a small log on the phone (About → Report a problem).
+  String? logDir;
+  if (!kIsWeb) {
+    try {
+      logDir = (await getApplicationSupportDirectory()).path;
+    } catch (_) {}
+  }
+  CrashLog.install(CrashLog(dir: logDir, version: () => Brand.version));
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(systemNavigationBarColor: Colors.transparent, statusBarColor: Colors.transparent));
 
@@ -171,10 +181,11 @@ Future<void> main() async {
   await Services.i.lab.open();
   final labEngine = AudioLabEngine(Services.i.lab);
   Services.i.labEngine = labEngine;
+  // 1.4.5: each deck's player session is followed (a song can start on a new
+  // one), so every song, deck and hand-off gets the same sound.
+  labEngine.watch([for (final p in handler.decks) p.androidAudioSessionIdStream]);
+  IosSoundBackend.restoreClassic = () => unawaited(equalizer.apply());
   unawaited(labEngine.start());
-  for (final p in handler.decks) {
-    p.androidAudioSessionIdStream.listen(labEngine.attach);
-  }
   handler.pauseFadeMs = () => Services.i.lab.fadeOnPause ? Services.i.lab.fadeMs : 0;
   handler.keepTogether = (a, b) => Services.i.lab.keepTogether(a.albumId ?? a.album, b.albumId ?? b.album);
   void applyPitch() => unawaited(handler.setPitch(Services.i.lab.pitchFor(settings.speed)));
@@ -233,6 +244,13 @@ Future<void> main() async {
   if (defaultTargetPlatform == TargetPlatform.android) LockScreenBridge(settings: settings, playback: handler.playbackState).start();
   // home-screen widget: cover, song, controls
   if (defaultTargetPlatform == TargetPlatform.android) HomeWidgetSync(current: handler.current, playback: handler.playbackState).start();
+  // 1.4.5: Byte was closed (by Android or a swipe): the last song comes back
+  // paused at its spot, on the player and the lock screen.
+  try {
+    await handler.restoreLast();
+  } catch (e, st) {
+    CrashLog.i?.record(e, st, source: 'Restore');
+  }
   runApp(kIsWeb ? const WebShell(child: ByteApp()) : const ByteApp());
   unawaited(equalizer.apply()); // iPhone: send the saved equalizer to the player
   account.maybeAutoSync();

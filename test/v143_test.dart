@@ -118,7 +118,7 @@ void main() {
     await t.runAsync(() => p.hostSound.setSharing(true));
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
-    expect(find.text('Apurba wants to share their sound'), findsOneWidget);
+    expect(find.textContaining('Apurba wants to share their sound settings'), findsOneWidget); // 1.4.5: names the sound
     expect(find.byKey(const ValueKey('party-sound-banner-accept')).hitTestable(), findsOneWidget);
     await t.tap(find.byKey(const ValueKey('party-sound-banner-accept')));
     await t.pump();
@@ -133,7 +133,7 @@ void main() {
     ));
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
-    expect(find.text('Apurba wants to share their sound'), findsOneWidget);
+    expect(find.textContaining('Apurba wants to share their sound settings'), findsOneWidget); // 1.4.5: names the sound
     await t.tap(find.byKey(const ValueKey('party-sound-banner-decline')));
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));

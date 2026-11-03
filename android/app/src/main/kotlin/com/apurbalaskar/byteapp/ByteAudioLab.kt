@@ -28,7 +28,13 @@ class ByteAudioLab(messenger: BinaryMessenger) {
                     ))
                     "attach" -> {
                         val s = call.argument<Number>("session")?.toInt() ?: 0
-                        if (s > 0 && !sessions.containsKey(s)) sessions[s] = make(s)
+                        // 1.4.5: an effect the phone refused earlier (too many at once)
+                        // is made again; Dart now releases each song's old session.
+                        val had = sessions[s]
+                        if (s > 0 && (had == null || (had.dp == null && Build.VERSION.SDK_INT >= 28) || had.rv == null)) {
+                            had?.let { release(it) }
+                            sessions[s] = make(s)
+                        }
                         apply()
                         result.success(true)
                     }
@@ -43,6 +49,7 @@ class ByteAudioLab(messenger: BinaryMessenger) {
                         apply()
                         result.success(true)
                     }
+                    "count" -> result.success(sessions.size)
                     else -> result.notImplemented()
                 }
             } catch (e: Exception) {
