@@ -99,6 +99,9 @@ class _DesktopPlayer extends AudioPlayerPlatform {
   _DesktopPlayer(super.id) {
     if (ByteDesktopAudio.available) {
       _p = mk.Player(configuration: const mk.PlayerConfiguration(title: 'Byte', pitch: true, logLevel: mk.MPVLogLevel.error));
+      // Tests on machines without a sound card: BYTE_MPV_AO=null.
+      final ao = Platform.environment['BYTE_MPV_AO'];
+      if (ao != null && ao.isNotEmpty) unawaited((_p!.platform as dynamic).setProperty('ao', ao) as Future<void>);
       final s = _p!.stream;
       _subs.addAll([
         s.playing.listen((_) => _emit()),

@@ -89,6 +89,8 @@ Future<void> main() async {
 
   // Web: every catalogue/lyrics call goes through the Byte web server (CORS).
   final Net net = kIsWeb ? WebProxy.net : HttpNet();
+  // Windows/Linux: no in-app browser for the sign-in pages (macOS has one).
+  if (desktopNoMediaSession) NoWebViewPlatform.install();
   if (kIsWeb) {
     NoWebViewPlatform.install(); // sign-in pages need the app; say so instead of crashing
     unawaited(WebProxy.net.ping());

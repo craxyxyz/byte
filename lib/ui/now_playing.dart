@@ -506,7 +506,7 @@ class _ModeHeader extends StatelessWidget {
               ],
             ),
           ),
-          if (!lyrics) ...[LikeButton(item: item, size: 22, round: true), const SizedBox(width: 8)],
+          if (!lyrics) ...[LikeButton(item: item, size: 20, round: true), const SizedBox(width: 8)],
           ValueListenableBuilder<bool>(
             valueListenable: LyricsPane.browsing,
             builder: (context, b, _) => lyrics && b
@@ -523,7 +523,7 @@ class _RoundBtn extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
-  const _RoundBtn({required this.icon, required this.tooltip, required this.onTap});
+  const _RoundBtn({super.key, required this.icon, required this.tooltip, required this.onTap});
   @override
   Widget build(BuildContext context) => Tooltip(
     message: tooltip,
@@ -897,8 +897,10 @@ class _TitleRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        // 1.4.1: only ⋯ beside the title, like the reference (Like is in ⋯)
-        _RoundBtn(icon: Icons.more_horiz_rounded, tooltip: 'More', onTap: () => showPlayerMore(context, item)),
+        // 1.4.4 (Apurba, 6:26 PM): a heart to the left of ⋯, same size as ⋯.
+        LikeButton(key: const ValueKey('np-like'), item: item, size: 20, round: true),
+        const SizedBox(width: 8),
+        _RoundBtn(key: const ValueKey('np-more'), icon: Icons.more_horiz_rounded, tooltip: 'More', onTap: () => showPlayerMore(context, item)),
       ],
     );
   }
@@ -907,64 +909,83 @@ class _TitleRow extends StatelessWidget {
 /// Opens a page in the current tab after the player sheet closes.
 void Function(BuildContext, Item) openItemFromRoot = (context, item) {};
 
-class LikeButton extends StatelessWidget {
+/// What the like control says (tooltip + screen reader), shared everywhere.
+const likeLabel = 'Like';
+const unlikeLabel = 'Remove from Liked';
+
+/// The Like heart: outline when not liked, a filled brand-red heart when
+/// liked. It reads and writes the same liked state as ⋯ → Like and the
+/// Liked Songs page (Library.setLiked, synced with the "likes" box), so it
+/// flips at once when the song changes or the song is liked elsewhere.
+/// A tap pops the heart (scale 1 → 1.3 → 1) with a light haptic; with
+/// system animations off it just switches.
+class LikeButton extends StatefulWidget {
   final Item item;
   final double size;
 
-  /// A star in a soft round button (the player).
+  /// A heart in a soft round 36 px glass button (the player, beside ⋯).
   final bool round;
   const LikeButton({super.key, required this.item, this.size = 28, this.round = false});
+  @override
+  State<LikeButton> createState() => _LikeButtonState();
+}
+
+class _LikeButtonState extends State<LikeButton> with SingleTickerProviderStateMixin {
+  late final AnimationController _pop = AnimationController(vsync: this, duration: const Duration(milliseconds: 360));
+  late final Animation<double> _scale = TweenSequence<double>([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.32).chain(CurveTween(curve: Curves.easeOut)), weight: 40),
+    TweenSequenceItem(tween: Tween(begin: 1.32, end: 1.0).chain(CurveTween(curve: Curves.elasticOut)), weight: 60),
+  ]).animate(_pop);
+
+  @override
+  void dispose() {
+    _pop.dispose();
+    super.dispose();
+  }
+
+  void _tap() {
+    HapticFeedback.lightImpact();
+    if (!(MediaQuery.maybeDisableAnimationsOf(context) ?? false)) _pop.forward(from: 0);
+    Services.i.library.toggleLike(widget.item);
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: Services.i.library,
       builder: (context, _) {
-        final liked = Services.i.library.isLiked(item.id);
-        if (round) {
+        final liked = Services.i.library.isLiked(widget.item.id);
+        final label = liked ? unlikeLabel : likeLabel;
+        final heart = ScaleTransition(
+          scale: _scale,
+          child: Icon(
+            liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+            key: ValueKey(liked),
+            size: widget.size,
+            color: liked ? ByteColors.pink : (widget.round ? Colors.white : null),
+          ),
+        );
+        if (widget.round) {
           return Tooltip(
-            message: liked ? 'Unlike' : 'Like',
+            message: label,
             child: Semantics(
               button: true,
-              label: liked ? 'Unlike' : 'Like',
+              toggled: liked,
+              label: label,
+              excludeSemantics: true,
               child: InkResponse(
                 radius: 22,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  Services.i.library.toggleLike(item);
-                },
+                onTap: _tap,
                 child: LiquidGlass(
                   radius: BorderRadius.circular(18),
                   dark: true,
-                  child: SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: Icon(liked ? Icons.star_rounded : Icons.star_outline_rounded, size: size, color: liked ? ByteColors.pink : Colors.white),
-                  ),
+                  child: SizedBox(width: 36, height: 36, child: Center(child: heart)),
                 ),
               ),
             ),
           );
         }
-        return IconButton(
-          tooltip: liked ? 'Unlike' : 'Like',
-          onPressed: () {
-            HapticFeedback.lightImpact();
-            Services.i.library.toggleLike(item);
-          },
-          icon: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 260),
-            transitionBuilder: (c, a) => ScaleTransition(
-              scale: CurvedAnimation(parent: a, curve: Curves.elasticOut),
-              child: c,
-            ),
-            child: Icon(
-              liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-              key: ValueKey(liked),
-              size: size,
-              color: liked ? ByteColors.pink : null,
-            ),
-          ),
-        );
+        return IconButton(tooltip: label, onPressed: _tap, icon: heart);
       },
     );
   }

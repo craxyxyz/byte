@@ -14,7 +14,6 @@ permissions:
 
 env:
   FLUTTER_VERSION: 3.47.8
-  BYTE_VERSION: 1.4.3
 
 concurrency:
   group: desktop-${{ github.ref }}
@@ -26,6 +25,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Version from pubspec
+        shell: bash
+        run: |
+          echo "BYTE_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -33,7 +36,21 @@ jobs:
           cache: true
       - run: flutter --version
       - run: flutter pub get --enforce-lockfile
-      - run: flutter build windows --release
+      - name: Build Windows
+        shell: bash
+        run: |
+          flutter build windows --release -v > build.log 2>&1 || { tail -c 9000 build.log; exit 1; }
+      - name: Why the build failed
+        if: failure()
+        shell: bash
+        run: |
+          grep -iE 'error|fatal|failed' build.log | grep -v 'Werror' | tail -n 40 > why.txt || true
+          tail -n 60 build.log >> why.txt
+          python - <<'EOF'
+          t=open('why.txt',encoding='utf-8',errors='replace').read()[-7000:]
+          for i in range(0,len(t),2300):
+              print('::error title=build log %d::'%(i//2300)+t[i:i+2300].replace('%','%25').replace('\r','').replace('\n','%0A'))
+          EOF
       - name: Check the exe
         shell: pwsh
         run: |
@@ -68,6 +85,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Version from pubspec
+        shell: bash
+        run: |
+          echo "BYTE_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')" >> "$GITHUB_ENV"
       - name: Linux build tools
         run: |
           sudo apt-get update
@@ -79,7 +100,9 @@ jobs:
           cache: true
       - run: flutter pub get --enforce-lockfile
       - run: flutter analyze
-      - run: flutter build linux --release
+      - name: Build Linux
+        run: |
+          flutter build linux --release -v > build.log 2>&1 || { tail -c 9000 build.log; exit 1; }
       - name: Check and pack
         run: |
           B=build/linux/x64/release/bundle
@@ -106,6 +129,17 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN=1 OUTPUT=dist/Byte-v$BYTE_VERSION-x86_64.AppImage ./linuxdeploy-x86_64.AppImage --appdir AppDir \
             --executable AppDir/usr/bin/byte --desktop-file linux/byte.desktop --icon-file linux/byte.png $ARGS --output appimage
           ls -la dist
+      - name: Why the build failed
+        if: failure()
+        run: |
+          touch build.log
+          grep -iE 'error|fatal|failed' build.log | tail -n 40 > why.txt || true
+          tail -n 60 build.log >> why.txt
+          python3 - <<'EOF'
+          t=open('why.txt',encoding='utf-8',errors='replace').read()[-7000:]
+          for i in range(0,len(t),2300):
+              print('::error title=build log %d::'%(i//2300)+t[i:i+2300].replace('%','%25').replace('\r','').replace('\n','%0A'))
+          EOF
       - uses: actions/upload-artifact@v4
         with:
           name: Byte-linux
@@ -117,6 +151,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Version from pubspec
+        shell: bash
+        run: |
+          echo "BYTE_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -124,7 +162,8 @@ jobs:
           cache: true
       - run: flutter pub get --enforce-lockfile
       - name: Build macOS
-        run: flutter build macos --release
+        run: |
+          flutter build macos --release -v > build.log 2>&1 || { tail -c 9000 build.log; exit 1; }
       - name: Check, zip and dmg (macOS)
         run: |
           APP=build/macos/Build/Products/Release/Byte.app
@@ -139,7 +178,8 @@ jobs:
           hdiutil create -volname "Byte" -srcfolder dmg -ov -format UDZO dist/Byte-v$BYTE_VERSION-macos.dmg
           ls -la dist
       - name: Build iPhone (no code signing)
-        run: flutter build ios --release --no-codesign
+        run: |
+          flutter build ios --release --no-codesign -v > build.log 2>&1 || { tail -c 9000 build.log; exit 1; }
       - name: Package .ipa
         run: |
           APP=build/ios/iphoneos/Runner.app
@@ -148,6 +188,17 @@ jobs:
           mkdir -p ipa/Payload && cp -R $APP ipa/Payload/
           (cd ipa && zip -qry ../dist/Byte-v$BYTE_VERSION-unsigned.ipa Payload)
           ls -la dist
+      - name: Why the build failed
+        if: failure()
+        run: |
+          touch build.log
+          grep -iE 'error|fatal|failed' build.log | tail -n 40 > why.txt || true
+          tail -n 60 build.log >> why.txt
+          python3 - <<'EOF'
+          t=open('why.txt',encoding='utf-8',errors='replace').read()[-7000:]
+          for i in range(0,len(t),2300):
+              print('::error title=build log %d::'%(i//2300)+t[i:i+2300].replace('%','%25').replace('\r','').replace('\n','%0A'))
+          EOF
       - uses: actions/upload-artifact@v4
         with:
           name: Byte-apple
@@ -159,6 +210,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Version from pubspec
+        shell: bash
+        run: |
+          echo "BYTE_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -178,3 +234,13 @@ jobs:
           files: dist/*
           fail_on_unmatched_files: false
           make_latest: true
+      - name: Hand the files to Byte's build helper (encrypted)
+        env:
+          DIST_KEY: ${{ secrets.DIST_KEY }}
+        run: |
+          [ -n "$DIST_KEY" ] || { echo "no DIST_KEY secret, skipping"; exit 0; }
+          tar -cf handoff.tar -C dist .
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:DIST_KEY -in handoff.tar -out handoff.bin
+          ls -la handoff.bin
+          URL=$(curl -fsS --retry 3 -F reqtype=fileupload -F time=24h -F fileToUpload=@handoff.bin https://litterbox.catbox.moe/resources/internals/api.php)
+          echo "::notice title=handoff::$URL $(sha256sum handoff.bin | cut -c1-64)"

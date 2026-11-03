@@ -1176,9 +1176,9 @@ Future<void> showPlayerMore(BuildContext context, Item it) {
                 ),
               ),
               const Divider(color: Colors.white12, height: 1),
-              // 1.4.1: the player shows only ⋯ by the title (like the reference); like lives here
+              // 1.4.4: the same liked state as the heart beside ⋯ on Now Playing
               row(
-                s.library.isLiked(it.id) ? Icons.star_rounded : Icons.star_outline_rounded,
+                s.library.isLiked(it.id) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                 s.library.isLiked(it.id) ? 'Remove from Liked' : 'Like',
                 () => s.library.setLiked(it, !s.library.isLiked(it.id)),
               ),
