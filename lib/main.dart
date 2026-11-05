@@ -93,6 +93,8 @@ Future<void> main() async {
   final lyricsBox = await Hive.openBox('lyrics');
 
   // Web: every catalogue/lyrics call goes through the Byte web server (CORS).
+  // Windows / Linux have no embedded web view: the sign-in pages say so.
+  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux)) NoWebViewPlatform.install();
   final Net net = kIsWeb ? WebProxy.net : HttpNet();
   if (kIsWeb) {
     NoWebViewPlatform.install(); // sign-in pages need the app; say so instead of crashing
@@ -105,10 +107,11 @@ Future<void> main() async {
   final equalizer = ByteEqualizer(settings);
   final automix = AutomixService(resolver: resolver, library: library, settings: settings);
   await automix.open();
-  final handler = await AudioService.init(
-    builder: () => ByteAudioHandler(resolver: resolver, yt: yt, library: library, settings: settings, equalizer: equalizer, automix: automix),
-    config: byteAudioConfig,
-  );
+  // Windows / Linux: audio_service has no desktop side, so the same handler
+  // runs without it (keyboard keys play/pause and skip, see keyboard_shortcuts).
+  final desktop = !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux);
+  ByteAudioHandler makeHandler() => ByteAudioHandler(resolver: resolver, yt: yt, library: library, settings: settings, equalizer: equalizer, automix: automix);
+  final ByteAudioHandler handler = desktop ? makeHandler() : await AudioService.init(builder: makeHandler, config: byteAudioConfig);
   // 2.0 web: the official embedded player makes the sound (visible, small)
   if (kIsWeb && EmbedBridge().available()) {
     handler.remote = WebEmbedOutput(

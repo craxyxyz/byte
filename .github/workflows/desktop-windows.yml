@@ -1,0 +1,95 @@
+# © 2026 Apurba Laskar
+# Byte 2.0 for Windows: build from this branch on a Windows runner, check the app, zip it,
+# prove what can be proven on the runner, and publish the result for the build owner.
+name: Byte Windows build
+
+on:
+  push:
+    branches: [v2-desktop]
+    paths-ignore: ['.github/workflows/desktop-probe.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: byte-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.8
+          cache: true
+
+      - name: Packages (lockfile enforced)
+        run: flutter pub get --enforce-lockfile
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Build Windows (release)
+        shell: bash
+        run: |
+          flutter build windows --release -v > build.log 2>&1 || { tail -c 9000 build.log; exit 1; }
+
+      - name: Verify, zip, check forbidden names
+        shell: pwsh
+        run: |
+          ./.github/scripts/windows-verify.ps1 -Release build/windows/x64/runner/Release -Out out
+
+      - name: Launch the app (window title, screenshot)
+        shell: pwsh
+        run: |
+          ./.github/scripts/windows-smoke.ps1 -Stage out/Byte -Out out/smoke
+
+      - name: Audio playback evidence (WinRT player, same engine as the app)
+        shell: powershell
+        run: |
+          & "$env:GITHUB_WORKSPACE\.github\scripts\windows-audio-probe.ps1" -Out "$env:GITHUB_WORKSPACE\out\audio"
+
+      - name: Publish the report (ci-logs branch) and the files (encrypted temp host)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          RUN=${{ github.run_id }}
+          PASS=$(openssl rand -hex 24)
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS -in out/Byte-2.0.0-windows-x64.zip -out out/byte-win.enc
+          ZIPURL=$(curl -s -F reqtype=fileupload -F time=72h -F fileToUpload=@out/byte-win.enc https://litterbox.catbox.moe/resources/internals/api.php || true)
+          SHOT=""
+          if [ -f out/smoke/screen.png ]; then
+            SHOT=$(curl -s -F reqtype=fileupload -F time=72h -F fileToUpload=@out/smoke/screen.png https://litterbox.catbox.moe/resources/internals/api.php || true)
+          fi
+          {
+            echo "run $RUN  sha256 of zip: $(sha256sum out/Byte-2.0.0-windows-x64.zip | cut -d' ' -f1)"
+            echo "zip bytes: $(stat -c %s out/Byte-2.0.0-windows-x64.zip)"
+            echo "encrypted url: $ZIPURL"
+            echo "passphrase: $PASS"
+            echo "screenshot url: $SHOT"
+            echo "--- verify"; cat out/verify.txt 2>/dev/null | head -c 1500
+            echo "--- smoke"; cat out/smoke/smoke.txt 2>/dev/null | head -c 1200
+            echo "--- audio"; cat out/audio/audio.txt 2>/dev/null | head -c 1800
+          } > report.txt
+          B=$(base64 -w0 report.txt)
+          gh api -X PUT "repos/${{ github.repository }}/contents/ci/win-$RUN.txt" -f message="windows report $RUN" -f content="$B" -f branch=ci-logs || echo "report push failed"
+          cat report.txt
+
+      - name: Keep the Windows zip and report on the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: Byte-Windows-2.0.0
+          path: |
+            out/Byte-2.0.0-windows-x64.zip
+            out/smoke/screen.png
+          if-no-files-found: error
+          retention-days: 14

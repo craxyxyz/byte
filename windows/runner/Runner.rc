@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.apurbalaskar" "\0"
-            VALUE "FileDescription", "byte" "\0"
+            VALUE "CompanyName", "Apurba Laskar" "\0"
+            VALUE "FileDescription", "Byte" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "byte" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.apurbalaskar. All rights reserved." "\0"
-            VALUE "OriginalFilename", "byte.exe" "\0"
-            VALUE "ProductName", "byte" "\0"
+            VALUE "InternalName", "Byte" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Apurba Laskar" "\0"
+            VALUE "OriginalFilename", "Byte.exe" "\0"
+            VALUE "ProductName", "Byte" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

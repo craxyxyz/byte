@@ -32,6 +32,8 @@ class PlatformPcmDecoder implements PcmDecoder {
   @override
   Future<Int16List> decode(String path) async {
     if (kIsWeb) throw UnsupportedError('no decoder on the web');
+    // Windows / Linux: no decoder channel yet; Automix plays its simple crossfade there.
+    if (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux) throw UnsupportedError('no decoder on this computer yet');
     if (defaultTargetPlatform == TargetPlatform.iOS && path.toLowerCase().endsWith('.webm')) {
       throw UnsupportedError('iPhone can\'t read WebM');
     }
