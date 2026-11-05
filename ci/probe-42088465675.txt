@@ -1,0 +1,14 @@
+
+Name                  Status StartType
+----                  ------ ---------
+AudioEndpointBuilder Running Automatic
+Audiosrv             Running Automatic
+
+
+
+
+Caption : Microsoft Windows Server 2025 Datacenter
+Version : 10.0.26100
+
+
+
