@@ -58,6 +58,7 @@ dependencies:
   multicast_dns: ^0.3.3+1
   smb_connect: ^0.0.9
   speech_to_text: ^7.5.0
+  just_audio_windows: ^0.2.3
 
 # Byte: just_audio with Byte's own balance/mono/crossfeed stage (MIT, see packages/just_audio/LICENSE).
 dependency_overrides:

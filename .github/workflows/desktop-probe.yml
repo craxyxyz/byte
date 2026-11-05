@@ -1,0 +1,21 @@
+name: probe audio on windows
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Audio devices
+        shell: pwsh
+        run: |
+          Get-Service Audiosrv, AudioEndpointBuilder | Format-Table Name, Status, StartType
+          Get-CimInstance Win32_SoundDevice | Format-List Name, Status, StatusInfo, Manufacturer
+          Get-PnpDevice -Class AudioEndpoint -ErrorAction SilentlyContinue | Format-Table Status, FriendlyName, InstanceId -AutoSize
+          Get-PnpDevice -Class MEDIA -ErrorAction SilentlyContinue | Format-Table Status, FriendlyName -AutoSize
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version | Format-List
+      - name: Which ffmpeg / tools
+        shell: pwsh
+        run: |
+          Get-Command ffmpeg -ErrorAction SilentlyContinue | Format-List Name, Source
+          Get-ChildItem C:\ -Directory | Select-Object -ExpandProperty Name
