@@ -1,5 +1,5 @@
 # © 2026 Apurba Laskar
-# Byte 2.0 for Windows: build from this branch on a Windows runner, check the app, zip it,
+# Byte 2.0 for Windows (rerun for the box copy): build from this branch on a Windows runner, check the app, zip it,
 # prove what can be proven on the runner, and publish the result for the build owner.
 name: Byte Windows build
 
