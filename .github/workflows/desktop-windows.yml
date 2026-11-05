@@ -75,33 +75,41 @@ jobs:
         run: |
           & "$env:GITHUB_WORKSPACE\.github\scripts\windows-audio-probe.ps1" -Out "$env:GITHUB_WORKSPACE\out\audio"
 
-      - name: Publish the report (ci-logs branch) and the files (encrypted temp host)
+      - name: Publish the results (run annotations, ci-logs branch, encrypted temp host)
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -u
           RUN=${{ github.run_id }}
           PASS=$(openssl rand -hex 24)
           openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS -in out/Byte-2.0.0-windows-x64.zip -out out/byte-win.enc
-          ZIPURL=$(curl -s -F reqtype=fileupload -F time=72h -F fileToUpload=@out/byte-win.enc https://litterbox.catbox.moe/resources/internals/api.php || true)
+          ZIPURL=$(curl -s -m 300 -F reqtype=fileupload -F time=72h -F fileToUpload=@out/byte-win.enc https://litterbox.catbox.moe/resources/internals/api.php || echo failed)
           SHOT=""
           if [ -f out/smoke/screen.png ]; then
-            SHOT=$(curl -s -F reqtype=fileupload -F time=72h -F fileToUpload=@out/smoke/screen.png https://litterbox.catbox.moe/resources/internals/api.php || true)
+            SHOT=$(curl -s -m 300 -F reqtype=fileupload -F time=72h -F fileToUpload=@out/smoke/screen.png https://litterbox.catbox.moe/resources/internals/api.php || echo failed)
           fi
+          SHA=$(sha256sum out/Byte-2.0.0-windows-x64.zip | cut -d' ' -f1)
+          SIZE=$(stat -c %s out/Byte-2.0.0-windows-x64.zip)
           {
-            echo "run $RUN  sha256 of zip: $(sha256sum out/Byte-2.0.0-windows-x64.zip | cut -d' ' -f1)"
-            echo "zip bytes: $(stat -c %s out/Byte-2.0.0-windows-x64.zip)"
-            echo "encrypted url: $ZIPURL"
-            echo "passphrase: $PASS"
-            echo "screenshot url: $SHOT"
-            echo "--- verify"; cat out/verify.txt 2>/dev/null | head -c 1500
-            echo "--- smoke"; cat out/smoke/smoke.txt 2>/dev/null | head -c 1200
-            echo "--- audio"; cat out/audio/audio.txt 2>/dev/null | head -c 1800
+            echo "run $RUN zip sha256 $SHA bytes $SIZE"
+            echo "zip-enc $ZIPURL"
+            echo "pass $PASS"
+            echo "shot $SHOT"
+            cat out/verify.txt 2>/dev/null | head -c 1400
+            echo "--- smoke"; cat out/smoke/smoke.txt 2>/dev/null | head -c 900
+            echo "--- audio"; cat out/audio/audio.txt 2>/dev/null | head -c 1500
           } > report.txt
+          # 1) annotations: readable through the API, one notice per line
+          python3 - <<'PY'
+          import os
+          for line in open('report.txt', encoding='utf-8', errors='replace'):
+              line = line.rstrip().replace('%', '%25').replace('\r', '')
+              if line:
+                  print('::notice title=byte-win::' + line[:1000])
+          PY
+          # 2) the ci-logs branch (a file the build owner can read)
           B=$(base64 -w0 report.txt)
-          gh api -X PUT "repos/${{ github.repository }}/contents/ci/win-$RUN.txt" -f message="windows report $RUN" -f content="$B" -f branch=ci-logs || echo "report push failed"
-          cat report.txt
+          gh api -X PUT "repos/${{ github.repository }}/contents/ci/win-$RUN.txt" -f message="windows report $RUN" -f content="$B" -f branch=ci-logs > pushout.txt 2>&1 && echo "ci-logs ok" || { echo "::warning title=ci-logs::push failed: $(head -c 600 pushout.txt | tr '\n' ' ')"; }
 
       - name: Keep the Windows zip and report on the run
         uses: actions/upload-artifact@v4
