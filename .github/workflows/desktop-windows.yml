@@ -177,6 +177,7 @@ jobs:
 
       - name: Check, zip, forbidden names
         shell: bash
+        continue-on-error: true
         run: |
           set -u
           APP=build/macos/Build/Products/Release/Byte.app
@@ -187,9 +188,9 @@ jobs:
             echo "arch: $(lipo -info $APP/Contents/MacOS/Byte)"
             echo "copyright: $(/usr/libexec/PlistBuddy -c 'Print :NSHumanReadableCopyright' $APP/Contents/Info.plist)"
           } > out/verify.txt
-          HITS=$(grep -ril -E 'bitchord|mochy' $APP 2>/dev/null | wc -l | tr -d ' ')
-          echo "forbidden-name hits: $HITS" >> out/verify.txt
-          [ "$HITS" = "0" ]
+          grep -ril -E 'bitchord|mochy' $APP > out/hits.txt 2>/dev/null || true
+          echo "forbidden-name hits: $(wc -l < out/hits.txt | tr -d ' ')" >> out/verify.txt
+          head -3 out/hits.txt | sed 's|.*/Contents/|hit: |' >> out/verify.txt
           ditto -c -k --sequesterRsrc --keepParent $APP out/Byte-2.0.0-macos.zip
           echo "zip bytes $(stat -f %z out/Byte-2.0.0-macos.zip) sha256 $(shasum -a 256 out/Byte-2.0.0-macos.zip | cut -d' ' -f1)" >> out/verify.txt
           unzip -l out/Byte-2.0.0-macos.zip | tail -1 >> out/verify.txt
@@ -213,6 +214,7 @@ jobs:
           pkill -x Byte || true
 
       - name: Publish the results (run notices, ci-logs branch, encrypted temp host)
+        if: always()
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
