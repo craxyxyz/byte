@@ -1,0 +1,51 @@
+run 42101202060 zip sha256 61d3fec83e2079e021188afc14d4af1a22f3834e586418194f16e693a7226501 bytes 16531208
+zip-enc https://tmpfiles.org/dl/wOAAJtvvBEYj/byte-win.enc
+pass e842bacdd16f6c404520ef651c23c50ac8cb11f61df61640
+shot https://tmpfiles.org/dl/wFAHJhv9BU17/screen.png
+exe bytes: 118272
+FileVersion=2.0.0+2005 ProductVersion=2.0.0+2005 ProductName=Byte CompanyName=Apurba Laskar FileDescription=Byte OriginalFilename=Byte.exe
+LegalCopyright=Copyright (C) 2026 Apurba Laskar
+forbidden or secret-like hits: 0
+zip entries: 43, uncompressed bytes: 39066293, Byte/Byte.exe present: 1 (every entry read, CRC checked)
+zip bytes: 16531208
+zip sha256: 61d3fec83e2079e021188afc14d4af1a22f3834e586418194f16e693a7226501
+top level in zip folder:
+  data 1
+  Byte.exe 118272
+  connectivity_plus_plugin.dll 102400
+  dartjni.dll 58368
+  flutter_secure_storage_windows_plugin.dll 158208
+  flutter_windows.dll 21289472
+  just_audio_windows_plugin.dll 183296
+  permission_handler_windows_plugin.dll 116736
+  README.txt 145
+  share_plus_plugin.dll 133632
+  speech_to_text_windows_plugin.dll 97792
+  url_launcher_windows_plugin.dll 98816
+--- smoke
+started Byte.exe pid 8716
+still running after 30 s: True
+main window title: 'Byte'
+screenshot 1024x768 saved
+stopped Byte.exe
+--- audio
+audio endpoints (Win32_SoundDevice): 0
+Audiosrv: Running
+tone written: 529244 bytes, 440 Hz, 6 s, 16-bit mono 44.1 kHz
+t=0 state=Opening position=0 duration=0 volume=1 muted=False
+t=0.5 state=Opening position=0 duration=0 volume=1 muted=False
+t=1 state=Opening position=0 duration=0 volume=1 muted=False
+t=1.5 state=Opening position=0 duration=0 volume=1 muted=False
+t=2 state=None position=0 duration=0 volume=1 muted=False
+t=2.5 state=None position=0 duration=0 volume=1 muted=False
+t=3 state=None position=0 duration=0 volume=1 muted=False
+t=3.5 state=None position=0 duration=0 volume=1 muted=False
+t=4 state=None position=0 duration=0 volume=1 muted=False
+t=4.5 state=None position=0 duration=0 volume=1 muted=False
+t=5 state=None position=0 duration=0 volume=1 muted=False
+t=5.5 state=None position=0 duration=0 volume=1 muted=False
+t=6 state=None position=0 duration=0 volume=1 muted=False
+t=6.5 state=None position=0 duration=0 volume=1 muted=False
+t=7 state=None position=0 duration=0 volume=1 muted=False
+t=7.5 state=None position=0 duration=0 volume=1 muted=False
+player disposed
