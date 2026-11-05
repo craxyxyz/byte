@@ -16,6 +16,7 @@ import 'package:byte/data/cloud_sync.dart';
 import 'package:byte/services.dart';
 import 'package:byte/ui/home_library_rows.dart';
 import 'package:byte/ui/screens/home_screen.dart';
+import 'package:byte/ui/screens/library_pages.dart' show LikedScreen;
 import 'package:byte/ui/screens/playlist_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -367,12 +368,12 @@ void main() {
       final f = find.text(other);
       if (f.evaluate().isNotEmpty) expect(tester.getTopLeft(f.first).dy, greaterThan(pls), reason: other);
     }
-    // tap Liked songs: plays them and opens the list
+    // tap Liked songs: opens the list, nothing starts playing (2.0.1)
     await tester.tap(find.byKey(const ValueKey('home-liked')));
     await tester.pump(const Duration(milliseconds: 600));
-    expect(sv.player.current.value?.id, isNotNull);
-    expect(['l1', 'l2', 'l3'], contains(sv.player.current.value!.id));
-    // tap a playlist: plays it, opens it, and it is remembered as played
+    expect(sv.player.current.value, isNull, reason: 'opening Liked songs must not start a song');
+    expect(find.byType(LikedScreen, skipOffstage: false), findsWidgets);
+    // tap a playlist: opens it, nothing plays
     // (last in this file: these taps write from inside the test clock)
     Navigator.of(tester.element(find.byType(HomeScreen))).popUntil((r) => r.isFirst);
     for (var i = 0; i < 4; i++) {
@@ -385,9 +386,9 @@ void main() {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await tester.pump(const Duration(milliseconds: 150));
     }
-    expect(sv.player.current.value?.id, 'r1');
+    expect(sv.player.current.value, isNull, reason: 'opening a playlist must not start a song');
     expect(find.byType(PlaylistScreen, skipOffstage: false), findsWidgets);
-    expect(sv.library.playlistPlayed.containsKey(road.id), isTrue);
+    expect(sv.library.playlistPlayed.containsKey(road.id), isFalse);
     await done(tester);
   });
 }

@@ -354,6 +354,9 @@ class DownloadSettingsScreen extends StatelessWidget {
 
 // ── Playback ─────────────────────────────────────────────────────────────
 // ── Automix ──────────────────────────────────────────────────────────────
+/// "4.5 s" / "5 s".
+String secLabel(double v) => v == v.roundToDouble() ? '${v.round()} s' : '${v.toStringAsFixed(1)} s';
+
 class AutomixScreen extends StatefulWidget {
   const AutomixScreen({super.key});
   @override
@@ -392,7 +395,7 @@ class _AutomixScreenState extends State<AutomixScreen> {
               _switchRow(
                 Icons.auto_awesome_rounded,
                 'Automix',
-                'Same loudness, no dead air, then a short pause before the next song',
+                'Same loudness, no dead air; the next song fades in before this one ends',
                 on,
                 (v) => st.automix = v,
               ),
@@ -414,7 +417,7 @@ class _AutomixScreenState extends State<AutomixScreen> {
             context,
             st.automixSmart
                 ? 'Smart: lines up the beats, nudges the tempo a little, swaps the bass so it never gets muddy, and skips long silent endings.'
-                : 'Simple: a smooth fade at the right moment, matched loudness, no tempo change.',
+                : 'Simple: a smooth, even fade at the right moment, matched loudness, bass handed over on long blends, no tempo change.',
           ),
           const SizedBox(height: 22),
           GroupCard(
@@ -428,14 +431,14 @@ class _AutomixScreenState extends State<AutomixScreen> {
                         SizedBox(width: 26, child: Icon(Icons.swap_horiz_rounded, color: on ? p.label : p.secondary)),
                         const SizedBox(width: 14),
                         Expanded(
-                          child: Text('Transition length', style: BT.body.copyWith(color: on ? p.label : p.secondary)),
+                          child: Text('Starts before the end', style: BT.body.copyWith(color: on ? p.label : p.secondary)),
                         ),
-                        Text('${sec.round()} s', style: BT.body.copyWith(color: p.secondary)),
+                        Text(secLabel(sec), style: BT.body.copyWith(color: p.secondary)),
                       ],
                     ),
                     SliderTheme(
                       data: SliderTheme.of(context).copyWith(inactiveTrackColor: p.separator),
-                      child: Slider(value: sec, min: 4, max: 16, divisions: 12, label: '${sec.round()} s', onChanged: on ? (v) => st.automixSeconds = v : null),
+                      child: Slider(value: sec, min: 2.0, max: 15.0, divisions: 26, label: secLabel(sec), onChanged: on ? (v) => st.automixSeconds = v : null),
                     ),
                   ],
                 ),
@@ -604,7 +607,7 @@ class PlaybackScreen extends StatelessWidget {
                             children: [
                               Text('Crossfade', style: BT.body.copyWith(color: st.automix ? p.secondary : p.label)),
                               Text(
-                                st.automix ? 'Automix is on: a short pause between songs' : 'Blends one song into the next',
+                                st.automix ? 'Automix is on: the next song starts ${secLabel(st.automixSeconds)} before the end' : 'Blends one song into the next',
                                 style: BT.sub.copyWith(color: p.secondary),
                               ),
                             ],
@@ -1653,7 +1656,7 @@ class MiscScreen extends StatelessWidget {
             _switchRow(
               Icons.close_rounded,
               'Stop music on close from recents',
-              'Stops playback when Byte is swiped away from recent apps',
+              'On: music stops when Byte is swiped away from recent apps. Off: it keeps playing.',
               st.stopOnClose,
               (v) => st.stopOnClose = v,
             ),

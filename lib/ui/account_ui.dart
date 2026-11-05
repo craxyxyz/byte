@@ -105,7 +105,7 @@ class _Switcher extends StatelessWidget {
             type: MaterialType.transparency,
             child: GlassBox(
               radius: BorderRadius.circular(28),
-              tint: Theme.of(context).brightness == Brightness.dark ? const Color(0xE62A2A2D) : const Color(0xE6FBFBFC),
+              tint: Theme.of(context).brightness == Brightness.dark ? const Color(0xFA2A2A2D) : const Color(0xFAFBFBFC),
               child: ListenableBuilder(
                 listenable: Listenable.merge([acc, Services.i.cloud]),
                 builder: (context, _) => Padding(

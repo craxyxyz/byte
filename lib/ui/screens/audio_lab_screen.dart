@@ -12,7 +12,7 @@ import '../page.dart';
 import '../style.dart';
 import '../widgets.dart';
 import '../../player/equalizer.dart' show ByteEqualizer;
-import 'settings_pages.dart' show QualityScreen, EqualizerScreen;
+import 'settings_pages.dart' show QualityScreen, EqualizerScreen, secLabel;
 import 'settings_screen.dart' show qualityLabel;
 import 'headphone_screen.dart';
 
@@ -701,20 +701,23 @@ class LabTransitionScreen extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SizedBox(height: 70, child: CustomPaint(size: const Size(double.infinity, 70), painter: _FadePainter(mode == 0 ? 0 : (mode == 1 ? 6 : st.crossfadeSeconds), lab.fadeCurve, BytePalette.of(context).accent))),
+              child: SizedBox(height: 70, child: CustomPaint(size: const Size(double.infinity, 70), painter: _FadePainter(mode == 0 ? 0 : (mode == 1 ? st.automixSeconds : st.crossfadeSeconds), lab.fadeCurve, BytePalette.of(context).accent))),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
               child: Text(
                 switch (mode) {
                   0 => 'Each song ends before the next one starts.',
-                  1 => 'Byte picks the best moment and length for every blend.',
+                  1 => 'The next song fades in ${secLabel(st.automixSeconds)} before the music ends, loudness matched.',
                   _ => 'The next song fades in while this one fades out.',
                 },
                 style: BT.sub.copyWith(color: BytePalette.of(context).secondary),
               ),
             ),
-            _Slider('Length', st.crossfadeSeconds, 1, 12, (v) => '${v.round()} s', (v) => st.crossfadeSeconds = v.roundToDouble(), enabled: mode == 2, divisions: 11),
+            if (mode == 1)
+              _Slider('Starts before the end', st.automixSeconds, 2.0, 15.0, secLabel, (v) => st.automixSeconds = v, divisions: 26)
+            else
+              _Slider('Length', st.crossfadeSeconds, 1, 12, (v) => '${v.round()} s', (v) => st.crossfadeSeconds = v.roundToDouble(), enabled: mode == 2, divisions: 11),
             _sw('Keep gapless albums intact', 'Songs from the same album play back to back, no blend', lab.gapless, (v) => lab.gapless = v),
           ],
         ),
@@ -751,7 +754,7 @@ class _FadePainter extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final mid = s.height / 2;
-    final overlap = (seconds / 12).clamp(0.0, 1.0) * s.width * 0.45;
+    final overlap = (seconds / 15).clamp(0.0, 1.0) * s.width * 0.45;
     final aEnd = s.width * 0.6 + overlap / 2, bStart = s.width * 0.4 - overlap / 2;
     double env(double x, double start, double end, bool out) {
       if (overlap <= 0) return 1;

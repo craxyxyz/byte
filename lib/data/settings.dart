@@ -62,18 +62,30 @@ class Settings extends ChangeNotifier {
   double get crossfadeSeconds => _get<double>('crossfade', 0.0);
   set crossfadeSeconds(double v) => _set('crossfade', v.clamp(0.0, 12.0));
 
-  // Automix: level-matched, silence-trimmed hand-offs between songs. Since
-  // 1.4.5 they don't overlap: a song ends, a short silence, the next starts.
+  // Automix: level-matched, silence-trimmed hand-offs between songs. 2.0.0+2003:
+  // the next song starts [automixSeconds] before this one ends and fades in
+  // while this one fades out (Android / iPhone; the browser and cast cannot overlap).
   bool get automix => _get('automix', true);
   set automix(bool v) => _set('automix', v);
 
-  /// true = Smart (beat-matched, bass swap), false = Simple (clean crossfade).
-  bool get automixSmart => _get('automixSmart', true);
+  /// true = Smart (beat-matched, bass swap; may start a little earlier to land
+  /// on a beat), false = Simple (clean crossfade exactly [automixSeconds] before the end).
+  bool get automixSmart => _get('automixSmart', false);
   set automixSmart(bool v) => _set('automixSmart', v);
 
-  /// Length of an Automix blend, 4–16 s.
-  double get automixSeconds => _get<double>('automixSec', 8.0);
-  set automixSeconds(double v) => _set('automixSec', v.clamp(4.0, 16.0));
+  /// How long before a song's end the next one starts, and the length of the
+  /// blend: 2–15 s, 8.5 s by default (Apurba: "8-9 sec pehle").
+  /// Stored under a new key (automixLead2, like stopOnClose2): the 4.5 s (or any
+  /// value) saved by an earlier build is left behind, so everybody starts at
+  /// 8.5 s once; a change made afterwards is saved under the new key and sticks.
+  static const double automixLeadDefault = 8.5;
+  static const double automixLeadMin = 2.0, automixLeadMax = 15.0;
+  double get automixSeconds {
+    final v = _get<double>('automixLead2', automixLeadDefault);
+    return (v.clamp(automixLeadMin, automixLeadMax) * 2).round() / 2;
+  }
+
+  set automixSeconds(double v) => _set('automixLead2', (v.clamp(automixLeadMin, automixLeadMax) * 2).round() / 2);
 
   /// With shuffle on, play the songs in the order that blends best.
   bool get automixSmartShuffle => _get('automixOrder', true);
@@ -264,8 +276,18 @@ class Settings extends ChangeNotifier {
   bool get noRepeatInSession => _get('noRepeat', true);
   set noRepeatInSession(bool v) => _set('noRepeat', v);
 
-  bool get stopOnClose => _get('stopOnClose', true);
-  set stopOnClose(bool v) => _set('stopOnClose', v);
+  /// Byte 2.0 (Apurba: "Recent app se app hatane ke baad gaana OFF ho jana
+  /// chahiye"): ON by default. Swiping Byte away from recents ends the music
+  /// (Android). Stored under a new key (stopOnClose2) so a choice saved by an
+  /// earlier 2.0 build does not keep it off: everybody starts ON once.
+  bool get stopOnClose => _get('stopOnClose2', true);
+  set stopOnClose(bool v) {
+    _set('stopOnClose2', v);
+    onStopOnCloseChanged?.call(v);
+  }
+
+  /// Tells the Android playback service about the setting (set in main.dart).
+  static void Function(bool on)? onStopOnCloseChanged;
 
   bool get showListenTogetherButton => _get('ltButton', false); // the video's bottom row: lyrics · output · queue (party lives in ⋯)
   set showListenTogetherButton(bool v) => _set('ltButton', v);

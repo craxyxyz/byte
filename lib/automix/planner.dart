@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'analysis.dart';
+import '../player/crossfade.dart' show blendEase, equalPowerS;
 
 /// Automix style. Smart = beat-matched, tempo-nudged, loudness-matched blend
 /// with a bass swap; simple = a loudness-matched crossfade that still skips
@@ -55,13 +56,15 @@ class TransitionPlan {
   /// Volumes (outgoing, incoming) at [t] 0..1 through the overlap, before gains.
   (double, double) volumes(double t) {
     final x = t.clamp(0.0, 1.0);
-    if (!isSmart) return (cos(x * pi / 2), sin(x * pi / 2));
-    final inV = sin(min(1.0, x / 0.75) * pi / 2);
+    if (!isSmart) return equalPowerS(x);
+    // the incoming song has its own, quicker ramp (full at 75 %); the outgoing
+    // one holds, then fades over the rest. Both eased, so no corner at the joins.
+    final inV = sin(blendEase(min(1.0, x / 0.75)) * pi / 2);
     final double outV;
     if (outFadesItself) {
-      outV = x < 0.7 ? 1.0 : cos((x - 0.7) / 0.3 * pi / 2);
+      outV = x < 0.7 ? 1.0 : cos(blendEase((x - 0.7) / 0.3) * pi / 2);
     } else {
-      outV = x < 0.25 ? 1.0 : cos((x - 0.25) / 0.75 * pi / 2);
+      outV = x < 0.25 ? 1.0 : cos(blendEase((x - 0.25) / 0.75) * pi / 2);
     }
     return (outV, inV);
   }
@@ -131,7 +134,7 @@ TransitionPlan planTransition({
   double outFallbackGain = 1,
   double inFallbackGain = 1,
 }) {
-  final want = (seconds.clamp(1.0, 20.0) * 1000).round();
+  final want = (seconds.clamp(1.0, 15.0) * 1000).round();
   final durA = outDurationMs > 0 ? outDurationMs : (out?.durationMs ?? 0);
   final durB = inDurationMs ?? inn?.durationMs;
   // the music's real end (silent / hidden-track tails skipped)
@@ -155,13 +158,17 @@ TransitionPlan planTransition({
   }
   if (mode == AutomixMode.simple || out == null || inn == null) {
     final t = min(want, cap);
+    final analysed = out != null && inn != null;
     return TransitionPlan(
       startAtMs: max(0, endA - t),
       incomingFromMs: fromB,
       fadeMs: t,
       outGain: outG,
       inGain: inG,
-      kind: out == null || inn == null ? 'fallback' : 'simple',
+      // a long overlap of two full mixes gets muddy: hand the low end over
+      // (2.0.0+2006). Same bass-swap the smart blend uses; no-op without the equaliser.
+      bassSwap: analysed && t >= 5000,
+      kind: analysed ? 'simple' : 'fallback',
     );
   }
 
@@ -170,7 +177,7 @@ TransitionPlan planTransition({
   var outFades = false;
   if (out.fadesOut) {
     final f = endA - out.outroStartMs;
-    t = min(max(want, f), (want * 1.5).round());
+    t = min(max(want, f), min((want * 1.5).round(), 20000));
     outFades = true;
   }
   var beat = out.hasBeat && inn.hasBeat;

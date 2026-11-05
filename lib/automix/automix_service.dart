@@ -214,6 +214,31 @@ class AutomixService extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Deletes Automix's fetched copy of [id] (and its leftovers); returns the bytes freed.
+  Future<int> evict(String id) async {
+    var freed = 0;
+    if (kIsWeb) return 0;
+    try {
+      final known = _files.remove(id);
+      final dir = await cacheDir();
+      final doomed = <File>[if (known != null) File(known)];
+      if (dir.existsSync()) {
+        for (final f in dir.listSync().whereType<File>()) {
+          final name = f.uri.pathSegments.last;
+          final base = name.contains('.') ? name.substring(0, name.lastIndexOf('.')) : name;
+          if (base == id || name.startsWith('$id.')) doomed.add(f);
+        }
+      }
+      for (final f in doomed.toSet()) {
+        if (f.existsSync()) {
+          freed += f.lengthSync();
+          f.deleteSync();
+        }
+      }
+    } catch (_) {}
+    return freed;
+  }
+
   /// Settings → Storage: drop every fetched copy (analyses are tiny and stay).
   Future<int> clearCache() async {
     var freed = 0;

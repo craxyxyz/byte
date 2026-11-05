@@ -27,14 +27,23 @@ class _LabHeadphoneScreenState extends State<LabHeadphoneScreen> {
   List<HeadphoneEntry> _all = const [];
   List<HeadphoneEntry> _hits = const [];
   String? _loading; // name being downloaded
+  bool _listFailed = false; // the bundled list could not be read
   Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
+    _loadList();
+  }
+
+  void _loadList() {
+    setState(() => _listFailed = false);
     unawaited(HeadphoneIndex.all().then((a) {
       if (mounted) setState(() => _all = a);
-    }).catchError((_) {}));
+    }).catchError((Object _) {
+      // Never leave the box saying "Loading…" for ever: say it, offer a retry.
+      if (mounted) setState(() => _listFailed = true);
+    }));
   }
 
   @override
@@ -122,13 +131,23 @@ class _LabHeadphoneScreenState extends State<LabHeadphoneScreen> {
                     onChanged: _search,
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
-                      hintText: _all.isEmpty ? 'Loading the list…' : 'Search ${_all.length} headphones',
+                      hintText: _all.isEmpty ? (_listFailed ? 'The list did not load' : 'Loading the list…') : 'Search ${_all.length} headphones',
                       prefixIcon: const Icon(Icons.search_rounded),
                       filled: true,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                     ),
                   ),
                 ),
+                if (_listFailed && _all.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: Row(
+                      children: [
+                        Expanded(child: Text('Byte could not read its headphone list.', style: BT.sub.copyWith(color: p.secondary))),
+                        TextButton(key: const ValueKey('hp-retry'), onPressed: _loadList, child: const Text('Try again')),
+                      ],
+                    ),
+                  ),
                 if (_q.text.trim().isNotEmpty && _hits.isEmpty && _all.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),

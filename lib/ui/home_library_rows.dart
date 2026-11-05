@@ -37,13 +37,9 @@ List<LocalPlaylist> byteMadePlaylists(Library lib) {
   return l;
 }
 
-/// Plays a Byte playlist from Home (and remembers it for the order) and opens it.
+/// Opens a Byte playlist from Home. It only opens the list; playing starts
+/// from a song row or the Play / Shuffle buttons on that page.
 void openBytePlaylist(BuildContext context, LocalPlaylist p) {
-  final lib = Services.i.library;
-  if (p.items.isNotEmpty) {
-    Services.i.player.playItems(p.items, from: p.name);
-    lib.notePlaylistPlayed(p.id);
-  }
   pushPage(context, PlaylistScreen(id: p.id));
 }
 
@@ -99,7 +95,7 @@ class HomeLibraryRows extends StatelessWidget {
   }
 }
 
-/// "Liked songs · N songs": tap plays them and opens the full list; ▶ only plays.
+/// "Liked songs · N songs": tap opens the full list (nothing plays); ▶ plays them.
 class _LikedCard extends StatelessWidget {
   final List<Item> likes;
   const _LikedCard({required this.likes});
@@ -120,10 +116,7 @@ class _LikedCard extends StatelessWidget {
             label: 'Liked songs, ${songCount(likes.length)}',
             child: Pressable(
               key: const ValueKey('home-liked'),
-              onTap: () {
-                play();
-                pushPage(context, const LikedScreen());
-              },
+              onTap: () => pushPage(context, const LikedScreen()),
               child: Container(
                 constraints: const BoxConstraints(minHeight: 76), // 1.4.6: grows with large text
                 padding: const EdgeInsets.all(10),

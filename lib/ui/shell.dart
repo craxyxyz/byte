@@ -18,6 +18,7 @@ import 'screens/library_screen.dart';
 import 'screens/search_screen.dart';
 import 'style.dart';
 import 'glass.dart';
+import 'kit/liquid_bar.dart';
 import 'art_colors.dart';
 import 'widgets.dart';
 
@@ -334,7 +335,7 @@ class FloatingBar extends StatelessWidget {
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
-                                colors: [p.bg.withValues(alpha: 0), p.bg.withValues(alpha: 0.75)],
+                                colors: [p.bg.withValues(alpha: 0), p.bg.withValues(alpha: LiquidBar.blurOn ? 0.0 : 0.6)],
                               ),
                             ),
                           ),
@@ -343,11 +344,8 @@ class FloatingBar extends StatelessWidget {
                       if (hasSong) Positioned.fromRect(rect: mini, child: MiniPlayer(compact: t > 0.5)),
                       Positioned.fromRect(
                         rect: nav,
-                        child: GlassBox(
-                          liquid: true,
-                          // 1.4.1: near-solid so the tabs read over any page
-                          tint: ReadableGlass.navTint(Theme.of(context).brightness == Brightness.dark),
-                          blur: 32,
+                        child: LiquidBar(
+                          key: const ValueKey('nav-glass'),
                           radius: BorderRadius.circular(nav.height / 2),
                           child: Stack(
                             children: [
@@ -382,10 +380,8 @@ class FloatingBar extends StatelessWidget {
                           message: 'Search',
                           child: Pressable(
                             onTap: () => state.select(3),
-                            child: GlassBox(
-                              liquid: true,
-                              tint: ReadableGlass.navTint(Theme.of(context).brightness == Brightness.dark),
-                              blur: 32,
+                            child: LiquidBar(
+                              key: const ValueKey('search-glass'),
                               radius: BorderRadius.circular(search.height / 2),
                               child: Center(
                                 child: AnimatedContainer(
@@ -394,7 +390,7 @@ class FloatingBar extends StatelessWidget {
                                   height: search.height - 10,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: state.index == 3 ? p.accent.withValues(alpha: 0.11) : Colors.transparent,
+                                    color: state.index == 3 ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
                                   ),
                                   child: Icon(Icons.search_rounded, size: 28, color: state.index == 3 ? p.accent : p.label, semanticLabel: 'Search'),
                                 ),
@@ -440,9 +436,7 @@ class _TabRow extends StatelessWidget {
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 200),
                 opacity: pos >= 0 ? 1 : 0,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(color: p.accent.withValues(alpha: 0.11), borderRadius: BorderRadius.circular(28)),
-                ),
+                child: LiquidCapsule(key: const ValueKey('nav-capsule'), accent: p.accent, dark: Theme.of(context).brightness == Brightness.dark),
               ),
             ),
             Row(
@@ -674,27 +668,16 @@ class _MiniGlassState extends State<MiniGlass> {
   @override
   Widget build(BuildContext context) {
     final r = BorderRadius.circular(28);
+    final blur = LiquidBar.blurOn;
     return TweenAnimationBuilder<Color?>(
-      tween: ColorTween(end: ReadableGlass.miniTint(_pal.primary)),
+      tween: ColorTween(end: liquidMiniTint(_pal.primary, blur: blur)),
       duration: const Duration(milliseconds: 600),
-      builder: (context, tint, child) => DecoratedBox(
+      builder: (context, tint, child) => LiquidBar(
         key: const ValueKey('mini-glass'),
-        decoration: BoxDecoration(
-          borderRadius: r,
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 22, offset: const Offset(0, 8))],
-        ),
-        child: GlassBox(
-          liquid: true,
-          radius: r,
-          tint: tint,
-          blur: 32,
-          shadow: false,
-          child: DecoratedBox(
-            position: DecorationPosition.foreground,
-            decoration: BoxDecoration(borderRadius: r, border: Border.all(color: Colors.white.withValues(alpha: 0.16), width: 0.8)),
-            child: child,
-          ),
-        ),
+        radius: r,
+        tint: tint,
+        dark: true,
+        child: child!,
       ),
       child: widget.child,
     );

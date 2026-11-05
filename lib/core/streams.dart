@@ -191,3 +191,34 @@ class StreamResolver {
   /// The stream already resolved for [videoId], if any.
   AudioStream? cached(String videoId) => _cache[videoId]?.$3;
 }
+
+// ── Upgrade quality (player menu) ───────────────────────────────────────
+
+/// "Opus · 160 kbps" for a stream (what the menu and Song info show).
+String streamLabel(AudioStream s) => '${s.isMp4 ? 'AAC' : s.isOpus ? 'Opus' : 'Audio'} · ${(s.bitrate / 1000).round()} kbps';
+
+int _codecRank(AudioStream s) => switch (s.itag) {
+  774 => 5,
+  251 => 4,
+  141 => 3,
+  140 => 2,
+  _ => 0,
+};
+
+/// Is [best] a real step up from the stream that is [playing] (null = unknown,
+/// e.g. a cached file)? Higher bitrate, or the same bitrate in a better codec.
+bool shouldUpgrade(AudioStream? playing, AudioStream best) {
+  if (playing == null) return true;
+  if (best.bitrate != playing.bitrate) return best.bitrate > playing.bitrate;
+  return _codecRank(best) > _codecRank(playing);
+}
+
+enum QualityUpgradeKind { upgraded, alreadyBest, unavailable, failed, nothingPlaying }
+
+/// What "Upgrade quality" did, in words for a toast.
+class QualityUpgrade {
+  final QualityUpgradeKind kind;
+  final String message;
+  final AudioStream? stream;
+  const QualityUpgrade(this.kind, this.message, [this.stream]);
+}

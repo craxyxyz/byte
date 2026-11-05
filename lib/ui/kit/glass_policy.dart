@@ -20,6 +20,6 @@ bool liveBlur() {
 /// How opaque a frosted tint must be to read well without a live blur.
 double frostedAlpha(double alpha, {bool dark = false}) {
   if (liveBlur()) return alpha;
-  final min = dark ? 0.86 : 0.9;
+  final min = dark ? 0.9 : 0.93;
   return alpha < min ? min : alpha;
 }

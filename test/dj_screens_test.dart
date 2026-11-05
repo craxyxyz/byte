@@ -123,7 +123,7 @@ void main() {
           expect(tester.takeException(), isNull, reason: '$tag ${page.runtimeType}');
           if (page is PlaybackScreen) {
             // the crossfade slider is handed over to Automix
-            expect(find.text('Automix is on: a short pause between songs'), findsOneWidget);
+            expect(find.text('Automix is on: the next song starts 8.5 s before the end'), findsOneWidget);
             final sliders = tester.widgetList<Slider>(find.byType(Slider));
             expect(sliders.every((s) => s.onChanged == null), isTrue);
           }
@@ -131,7 +131,7 @@ void main() {
             await tester.tap(find.text('Simple'));
             await settle(tester);
             expect(sv.settings.automixSmart, isFalse);
-            expect(find.textContaining('Simple: a smooth fade'), findsOneWidget);
+            expect(find.textContaining('Simple: a smooth, even fade'), findsOneWidget);
             await tester.tap(find.text('Smart'));
             await settle(tester);
             expect(sv.settings.automixSmart, isTrue);

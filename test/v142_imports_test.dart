@@ -5,6 +5,7 @@ import 'package:byte/data/service_library.dart';
 import 'package:byte/services.dart';
 import 'package:byte/ui/imported_row.dart';
 import 'package:byte/ui/screens/home_screen.dart';
+import 'package:byte/ui/screens/playlist_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -171,7 +172,7 @@ void main() {
     expect(importSourceLabel('pl_123'), isNull);
     expect(matched, greaterThan(0));
   });
-  testWidgets('Home: imported playlists from every app + Liked songs are the FIRST row; tap plays and opens', (tester) async {
+  testWidgets('Home: imported playlists from every app + Liked songs are the FIRST row; tap opens, never plays', (tester) async {
     // nothing imported yet: no row at all
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: ImportedRow())));
     expect(find.byKey(const ValueKey('home-imports')), findsNothing);
@@ -219,14 +220,15 @@ void main() {
       final f = find.text(other);
       if (f.evaluate().isNotEmpty) expect(tester.getTopLeft(f.first).dy, greaterThan(row), reason: other);
     }
-    // tap: plays that playlist and opens it
+    // tap: opens that playlist; nothing plays until a song / Play is tapped
     final saavnRomantic = sv.library.playlists.firstWhere((p) => p.source == 'jiosaavn:J1');
     // 1.4.5: Liked songs + Your playlists sit above it now; scroll to it
     await tester.ensureVisible(find.byKey(ValueKey('home-service-${saavnRomantic.id}')));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(ValueKey('home-service-${saavnRomantic.id}')));
     await tester.pump(const Duration(milliseconds: 600));
-    expect(sv.player.current.value?.title, 'Pehla Nasha');
+    expect(sv.player.current.value, isNull, reason: 'opening a playlist must not start a song');
+    expect(find.byType(PlaylistScreen, skipOffstage: false), findsWidgets);
     await tester.runAsync(() => sv.player.stop());
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 30));

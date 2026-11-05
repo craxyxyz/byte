@@ -2,9 +2,9 @@
 //
 // Home → "From Spotify" (1.4.4, Apurba): as soon as a music account is
 // logged in, Home shows ITS playlists — Liked Songs first — whether or not
-// they are in Byte yet. Tap: an imported one opens and plays at once; one
-// that isn't in Byte yet is brought in (read + matched) right there, then
-// opens and plays. The list is kept on the phone, so Home never goes empty
+// they are in Byte yet. Tap: an imported one opens (nothing plays until you tap
+// a song or Play); one that isn't in Byte yet is brought in (read + matched)
+// right there, then opens. The list is kept on the phone, so Home never goes empty
 // for a logged-in account even when the service is slow or busy.
 // Other logged-in music apps get the same row with their own playlists.
 
@@ -157,21 +157,19 @@ class _SpotifyArt extends StatelessWidget {
   }
 }
 
-/// Opens one of the account's playlists from Home: in Byte already → opens
-/// and plays at once; not yet → brought in right here, then opens and plays.
+/// Opens one of the account's playlists from Home: in Byte already → opens;
+/// not yet → brought in right here, then opens. Never starts playback itself.
 Future<void> openSpotifyPlaylist(BuildContext context, SpotifyPlaylistInfo p) async {
   final sv = Services.i;
   final sy = sv.spotifySync;
   if (p.id == 'liked') {
     if (sy.likedImported && sv.library.likes.isNotEmpty) {
-      unawaited(sv.player.playItems(sv.library.likes, from: 'Liked Songs'));
       pushPage(context, const LikedScreen());
       return;
     }
   } else {
     final have = sy.imported(p);
     if (have != null && have.items.isNotEmpty) {
-      unawaited(sv.player.playItems(have.items, from: have.name));
       pushPage(context, PlaylistScreen(id: have.id));
       return;
     }
@@ -183,10 +181,8 @@ Future<void> openSpotifyPlaylist(BuildContext context, SpotifyPlaylistInfo p) as
     return;
   }
   if (p.id == 'liked') {
-    unawaited(sv.player.playItems(sv.library.likes, from: 'Liked Songs'));
     pushPage(context, const LikedScreen());
   } else {
-    unawaited(sv.player.playItems(items, from: p.name));
     final have = sy.imported(p);
     if (have != null) pushPage(context, PlaylistScreen(id: have.id));
   }
@@ -248,7 +244,7 @@ class _BringingIn extends StatelessWidget {
               builder: (_, s, _) => Text(s, style: BT.sub.copyWith(color: p.secondary)),
             ),
             const SizedBox(height: 4),
-            Text('It plays as soon as it\'s ready.', style: BT.caption.copyWith(color: p.secondary)),
+            Text('It opens as soon as it\'s ready.', style: BT.caption.copyWith(color: p.secondary)),
           ],
         ),
       ),
@@ -284,10 +280,7 @@ class _OtherServiceRow extends StatelessWidget {
                   art: const LikedArt(),
                   title: libSpec(s).likedLabel,
                   sub: songCount(liked),
-                  onTap: () {
-                    unawaited(sv.player.playItems(sv.library.likes, from: 'Liked songs'));
-                    pushPage(context, const LikedScreen());
-                  },
+                  onTap: () => pushPage(context, const LikedScreen()),
                 ),
               for (final p in lists)
                 ServiceCard(
@@ -295,10 +288,7 @@ class _OtherServiceRow extends StatelessWidget {
                   art: Artwork(p.artwork, size: 148, radius: 0, icon: Icons.queue_music_rounded),
                   title: p.name,
                   sub: songCount(p.items.length),
-                  onTap: () {
-                    if (p.items.isNotEmpty) unawaited(sv.player.playItems(p.items, from: p.name));
-                    pushPage(context, PlaylistScreen(id: p.id));
-                  },
+                  onTap: () => pushPage(context, PlaylistScreen(id: p.id)),
                 ),
             ],
           ),

@@ -293,7 +293,7 @@ void main() {
     }
     expect(acc.reads, 1);
     expect(sv.spotifySync.imported(acc.ls.first)!.items.length, 3);
-    expect(sv.player.current.value?.title, 'Zinda');
+    expect(sv.player.current.value, isNull, reason: 'bringing a playlist in opens it, never plays it');
     expect(find.byKey(const ValueKey('bringing-in')), findsNothing);
     await tester.runAsync(() => sv.player.stop());
 
@@ -305,7 +305,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('home-spotify-pl_gym')));
     await tester.pump(const Duration(milliseconds: 600));
     expect(acc.reads, 1, reason: 'imported: opens instantly');
-    expect(sv.player.current.value?.title, 'Zinda');
+    expect(sv.player.current.value, isNull, reason: 'opening never plays');
     await tester.runAsync(() => sv.player.stop());
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 30));

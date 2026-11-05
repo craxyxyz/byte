@@ -332,7 +332,8 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   /// The silence to leave between [ended] and [next] when one ends on its own.
   Duration? _gapBetween(Item? ended, Item? next) {
     if (autoAdvanceGap <= Duration.zero || remote != null) return null;
-    // A crossfade set by hand overlaps as before (Automix no longer overlaps).
+    // A crossfade set by hand overlaps as before; Automix overlaps too (2.0.0+2003), so this gap only
+    // happens when its blend couldn't run (next song not ready, a gapless album).
     if (!_automixOn && settings.crossfadeSeconds > 0) return null;
     if (ended != null && next != null && keepTogether(ended, next)) return null; // gapless album
     return autoAdvanceGap;
@@ -424,6 +425,15 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     }
   }
 
+  /// Songs the listener asked to hear at the best quality ("Upgrade quality"):
+  /// they keep it for the rest of the session, whatever the setting says.
+  final Set<String> _bestQuality = {};
+
+  /// Was [id] upgraded to the best quality from the song menu?
+  bool isUpgraded(String id) => _bestQuality.contains(id);
+
+  Future<AudioQuality> _qualityFor(Item it) async => _bestQuality.contains(it.id) ? AudioQuality.high : await _quality();
+
   bool _onWifi = true;
 
   /// On Wi-Fi (or Ethernet) as of the last song load.
@@ -485,7 +495,7 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final hasDl = dl != null && !kIsWeb && File(dl.path).existsSync();
     if (hasDl && settings.preferDownloads) return AudioSource.uri(Uri.file(dl.path));
     // Automix fetched this song ahead of time: play the copy on the phone.
-    final cached = _automixOn ? automix!.cachedFile(it.id) : null;
+    final cached = _automixOn && !_bestQuality.contains(it.id) ? automix!.cachedFile(it.id) : null;
     if (cached != null) {
       final an = automix!.analysisOf(it.id);
       if (_normalizeNow && an != null) _gains[it.id] = loudnessGain(an.loudnessDb);
@@ -495,14 +505,14 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     if (kIsWeb && webPlayUrl != null) {
       final id = it.kind == ItemKind.video ? await _officialAudioId(it.id) : it.id;
       _gains[it.id] = 1.0;
-      return AudioSource.uri(webPlayUrl!(id, await _quality()));
+      return AudioSource.uri(webPlayUrl!(id, await _qualityFor(it)));
     }
     final AudioStream s;
     try {
       // A music video plays as sound only: from the song's official audio
       // track when YouTube Music has one (no intro/outro, no video data).
       final id = it.kind == ItemKind.video ? await _officialAudioId(it.id) : it.id;
-      s = await resolver.resolve(id, await _quality(), preferMp4: _needsMp4, probe: settings.verifyStreams, avoid: avoid);
+      s = await resolver.resolve(id, await _qualityFor(it), preferMp4: _needsMp4, probe: settings.verifyStreams, avoid: avoid);
     } catch (_) {
       // Offline or blocked: the downloaded copy still plays.
       if (hasDl) return AudioSource.uri(Uri.file(dl.path));
@@ -632,6 +642,100 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   Future<void> playSong(Item it) => playItems([it], radio: true);
+
+  // ── Song menu: Start radio / Upgrade quality / reload without a gap in the song ──
+
+  /// "Start radio": the queue after [it] becomes similar songs. The song that
+  /// is playing keeps playing (nothing restarts); another song starts, with
+  /// its radio filling the queue behind it.
+  Future<void> startRadio(Item it) async {
+    if (it.isLocal) return;
+    if (current.value?.id != it.id) {
+      await playItems([it], radio: true);
+      return;
+    }
+    playingFrom.value = '${it.artists.isNotEmpty ? it.artists.first.name : it.title} Radio';
+    queueModel.clearUpcoming();
+    _radioIds.clear();
+    _preparedOnIdle = null;
+    _queueChanged();
+    _radioFails = 0;
+    _radioRetryAt = 0;
+    await _extendWithRadio(it, force: true);
+  }
+
+  /// The song that is playing reads from a file on the phone (a download or
+  /// Automix's fetched copy).
+  bool get playingFromFile => _deckFile[_cur] != null;
+
+  /// Why [it] cannot be switched to a better stream (null = it can).
+  String? qualityBlocker(Item it) {
+    if (it.isLocal || it.isDav || it.isAddon || it.isSmb) return 'This song is a file on your phone or another source, so it already plays as it is';
+    if (kIsWeb) return 'In the browser the embedded player picks the quality itself';
+    if (remote != null) return 'Quality can\'t be changed while casting or in a party';
+    if (inGap) return 'Wait for the next song to start';
+    return null;
+  }
+
+  /// "Upgrade quality": finds the best stream the catalogue has for the
+  /// song that is playing and, when it is better than the one playing,
+  /// reloads it at the same spot (a short rebuffer, no restart).
+  Future<QualityUpgrade> upgradeCurrentQuality() async {
+    final it = current.value;
+    if (it == null) return const QualityUpgrade(QualityUpgradeKind.nothingPlaying, 'Nothing is playing');
+    final why = qualityBlocker(it);
+    if (why != null) return QualityUpgrade(QualityUpgradeKind.unavailable, why);
+    final dl = library.download(it.id);
+    if (dl != null && !kIsWeb && File(dl.path).existsSync() && settings.preferDownloads) {
+      return const QualityUpgrade(QualityUpgradeKind.unavailable, 'Playing the downloaded copy. Download it again to change its quality');
+    }
+    final playing = currentStream.value;
+    final AudioStream best;
+    try {
+      resolver.forget(it.id);
+      best = await resolver.resolve(it.id, AudioQuality.high, preferMp4: _needsMp4, probe: settings.verifyStreams);
+    } catch (e) {
+      return QualityUpgrade(QualityUpgradeKind.failed, _friendly(e));
+    }
+    if (current.value?.id != it.id) return const QualityUpgrade(QualityUpgradeKind.failed, 'The song changed');
+    if (!shouldUpgrade(playing, best)) {
+      _bestQuality.add(it.id);
+      return QualityUpgrade(QualityUpgradeKind.alreadyBest, 'Already the best quality: ${streamLabel(best)}', best);
+    }
+    _bestQuality.add(it.id);
+    try {
+      await reloadCurrent();
+    } catch (e) {
+      return QualityUpgrade(QualityUpgradeKind.failed, _friendly(e));
+    }
+    return QualityUpgrade(QualityUpgradeKind.upgraded, 'Now playing at ${streamLabel(currentStream.value ?? best)}', best);
+  }
+
+  /// Loads the song that is playing again from the same spot (same play /
+  /// pause state), e.g. after its quality changed or its cached file went.
+  Future<void> reloadCurrent() async {
+    final it = current.value;
+    if (it == null || remote != null) return;
+    final wasPlaying = _cur.playing;
+    final at = _cur.position;
+    final token = ++_loadToken;
+    _cancelFade(finishIncoming: true);
+    _recovering = true;
+    try {
+      final src = await _sourceFor(it);
+      if (token != _loadToken || current.value?.id != it.id) return;
+      await _load(_cur, src, initialPosition: at);
+      if (token != _loadToken) return;
+      await _cur.setVolume(_gainFor(it));
+      await _cur.setSpeed(settings.speed);
+      if (wasPlaying) unawaited(_cur.play());
+      _healthyFromMs = at.inMilliseconds;
+      clock.set(at.inMilliseconds, playing: wasPlaying);
+      _broadcast(_cur);
+    } finally {
+      _recovering = false;
+    }
+  }
 
   /// 1.4.1: up next made from the listener's own signals (see dj/up_next.dart);
   /// null = YouTube Music's radio as it comes.
@@ -1622,8 +1726,11 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final endAt = min(endA, ms);
     final from = automix!.analysisOf(next.id)?.audioStartMs ?? 0;
     final fetching = automix!.isPreparing(next.id);
-    if (pos >= endAt - 20000 &&
-        (!fetching || pos >= endAt - 8000) &&
+    // the next song is loaded in good time before the blend (2.0.0+2006: the
+    // lead is up to 15 s now, so the 20 s / 8 s marks moved with it)
+    final leadMs = (settings.automixSeconds * 1000).round();
+    if (pos >= endAt - (leadMs * 3 ~/ 2 + 14000) &&
+        (!fetching || pos >= endAt - (leadMs + 5000)) &&
         (_preparedOnIdle?.id != next.id || (_idleFrom ?? 0) != from) &&
         !_preparing &&
         _prepTries < 3) {
@@ -1632,6 +1739,20 @@ class ByteAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       return;
     }
     if (sleep.value.$1 == SleepMode.endOfTrack && endAt >= ms - 300) return;
+    // 2.0.0+2003 (Apurba: "automix gana khatam hone se 4-5 sec pehle"): the next
+    // song starts [automixSeconds] (8.5 s by default) before this one's music ends and the
+    // two overlap. Gapless albums stay back-to-back; with the next song not
+    // ready the song plays out and the short gap path below takes over.
+    if (!_fading && _preparedOnIdle?.id == next.id && !keepTogether(cur, next)) {
+      final plan = planFor(cur, next, ms);
+      if (pos >= plan.startAtMs) {
+        // next song only ready late (or the listener seeked into the outro):
+        // the blend shrinks to what is left of the music instead of running past its end
+        final late = pos - plan.startAtMs > 700 ? plan.startingLate(pos, endAt) : plan;
+        unawaited(_startTransition(late, late.fadeMs));
+        return;
+      }
+    }
     // Dead air at the end (more than a second): fade out and end there.
     if (endAt < ms - 1000 && pos >= endAt - tailFadeMs && _tailFor != cur.id) {
       _tailFor = cur.id;

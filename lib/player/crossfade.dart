@@ -30,6 +30,21 @@ class CrossfadePlan {
   }
 }
 
+/// Automix blend curve (2.0.0+2006). The progress is first eased with a
+/// smoothstep so a long overlap starts and ends softly (the incoming song
+/// creeps in, the outgoing one is not dropped at once), then mapped onto an
+/// equal-power pair: out² + in² = 1 at every point, so the loudness stays
+/// even through the middle. Monotonic, (1, 0) at 0 and (0, 1) at 1.
+double blendEase(double t) {
+  final x = t.clamp(0.0, 1.0);
+  return x * x * (3 - 2 * x);
+}
+
+(double, double) equalPowerS(double t) {
+  final e = blendEase(t);
+  return (cos(e * pi / 2), sin(e * pi / 2));
+}
+
 /// Sleep timer fade: full volume until the last [fadeMs], then down to zero.
 double sleepFadeVolume(int remainingMs, {int fadeMs = 10000}) {
   if (remainingMs <= 0) return 0;

@@ -221,6 +221,18 @@ class MainActivity : AudioServiceActivity() {
             }
         }
 
+        // Swipe-away: the playback service reads this flag when Byte is removed from recents.
+        MethodChannel(messenger, "byte/playback").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "stopOnClose" -> {
+                    val on = call.arguments as? Boolean ?: true
+                    getSharedPreferences("byte_playback", MODE_PRIVATE).edit().putBoolean("stop_on_close", on).apply()
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
         // Automix: decode a song to PCM for analysis, off the main thread.
         MethodChannel(messenger, "byte/automix").setMethodCallHandler { call, result ->
             when (call.method) {

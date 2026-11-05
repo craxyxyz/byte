@@ -2,7 +2,7 @@
 //
 // Home → "From <app>" shelves (1.4.2, Apurba; one shelf per app since 1.4.5): every playlist brought in
 // from another music app — by log-in or by link, from any number of apps —
-// plus the liked songs, as the very first row of Home. Tap: it plays and opens.
+// plus the liked songs, as the very first row of Home. Tap: it opens the list (nothing plays until you tap a song).
 
 import 'package:flutter/material.dart';
 
@@ -99,10 +99,7 @@ class ImportedRow extends StatelessWidget {
                     art: PlaylistMosaic(p),
                     title: p.name,
                     sub: g.key == 'Imported lists' ? '${importSourceLabel(p.source)} · ${songCount(p.items.length)}' : songCount(p.items.length),
-                    onTap: () {
-                      if (p.items.isNotEmpty) Services.i.player.playItems(p.items, from: p.name);
-                      pushPage(context, PlaylistScreen(id: p.id));
-                    },
+                    onTap: () => pushPage(context, PlaylistScreen(id: p.id)),
                   ),
               ],
             ),

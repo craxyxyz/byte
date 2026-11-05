@@ -11,6 +11,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.AudioManager;
 import android.net.Uri;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
@@ -268,6 +269,9 @@ public class AudioService extends MediaBrowserServiceCompat {
     private FlutterEngine flutterEngine;
     private AudioServiceConfig config;
     private PowerManager.WakeLock wakeLock;
+    // Byte 2.0: while a song plays with the screen off, Wi-Fi stays at full speed
+    // (otherwise a streamed song can stall minutes after the screen locked).
+    private WifiManager.WifiLock wifiLock;
     private MediaSessionCompat mediaSession;
     private MediaSessionCallback mediaSessionCallback;
     private List<MediaControl> controls = new ArrayList<>();
@@ -325,6 +329,15 @@ public class AudioService extends MediaBrowserServiceCompat {
 
         PowerManager pm = (PowerManager)getSystemService(Context.POWER_SERVICE);
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, AudioService.class.getName());
+        try {
+            WifiManager wm = (WifiManager)getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null) {
+                wifiLock = wm.createWifiLock(Build.VERSION.SDK_INT >= 29 ? WifiManager.WIFI_MODE_FULL_LOW_LATENCY : WifiManager.WIFI_MODE_FULL_HIGH_PERF, "byte:playback");
+                wifiLock.setReferenceCounted(false);
+            }
+        } catch (Exception e) {
+            Log.w("AudioService", "no wifi lock", e);
+        }
 
         // Get max available VM memory, exceeding this amount will throw an
         // OutOfMemory exception. Stored in kilobytes as LruCache takes an
@@ -791,11 +804,23 @@ public class AudioService extends MediaBrowserServiceCompat {
     private void acquireWakeLock() {
         if (!wakeLock.isHeld())
             wakeLock.acquire();
+        try {
+            if (wifiLock != null && !wifiLock.isHeld())
+                wifiLock.acquire();
+        } catch (Exception e) {
+            Log.w("AudioService", "wifi lock", e);
+        }
     }
 
     private void releaseWakeLock() {
         if (wakeLock.isHeld())
             wakeLock.release();
+        try {
+            if (wifiLock != null && wifiLock.isHeld())
+                wifiLock.release();
+        } catch (Exception e) {
+            Log.w("AudioService", "wifi lock", e);
+        }
     }
 
     private void activateMediaSession() {
@@ -920,7 +945,29 @@ public class AudioService extends MediaBrowserServiceCompat {
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         if (listener != null) {
-            listener.onTaskRemoved();
+            listener.onTaskRemoved(); // Dart: saves the resume point and stops the player
+        }
+        // Byte 2.0 (Apurba: "Recent app se app hatane ke baad gaana OFF ho jana chahiye"):
+        // with "Stop music on close from recents" on (the default; Dart keeps this flag
+        // up to date through the byte/playback channel) the music ends here whatever
+        // Dart managed to do: notification gone, service stopped, process ended so no
+        // sound can carry on. A short delay lets Dart write the resume point first.
+        boolean stopOnClose = getSharedPreferences("byte_playback", Context.MODE_PRIVATE).getBoolean("stop_on_close", true);
+        if (stopOnClose) {
+            handler.postDelayed(() -> {
+                try {
+                    ServiceCompat.stopForeground(AudioService.this, STOP_FOREGROUND_REMOVE);
+                    getNotificationManager().cancel(NOTIFICATION_ID);
+                } catch (Exception e) {
+                    Log.w("AudioService", "task removed: notification", e);
+                }
+                try {
+                    stop();
+                } catch (Exception e) {
+                    Log.w("AudioService", "task removed: stop", e);
+                }
+                android.os.Process.killProcess(android.os.Process.myPid());
+            }, 900);
         }
         super.onTaskRemoved(rootIntent);
     }

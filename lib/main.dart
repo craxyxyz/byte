@@ -41,6 +41,7 @@ import 'lock/lock_bridge.dart';
 import 'ui/glass.dart';
 import 'player/home_widget_sync.dart';
 import 'web/no_webview.dart';
+import 'player/stop_on_close_native.dart';
 import 'web/web_proxy.dart';
 import 'web/embed_output.dart';
 import 'core/models.dart' show SearchFilter;
@@ -85,6 +86,8 @@ Future<void> main() async {
   await Hive.initFlutter('byte');
   final settings = Settings();
   await settings.open();
+  Settings.onStopOnCloseChanged = StopOnCloseNative.push;
+  unawaited(StopOnCloseNative.push(settings.stopOnClose));
   final library = Library();
   await library.open();
   final lyricsBox = await Hive.openBox('lyrics');

@@ -7,7 +7,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../cast/cast_controller.dart';
 import '../core/models.dart';
@@ -17,15 +16,15 @@ import '../lyrics/dual.dart' show lyricsNeedDual;
 import '../lyrics/lrc.dart';
 import 'lyrics_view.dart' show LyricsPace, lyricsNowMs, lyricsInLook, defaultLookFor, LyricsLook, LyricsPane, playingDurationSec;
 import '../player/audio_route.dart';
-import '../player/byte_handler.dart';
 import '../player/queue.dart' as q;
 import '../services.dart';
 import 'kit/line_fill.dart';
 import 'glyphs.dart';
-import 'now_playing.dart' show showSleepSheet, showSpeedSheet;
 import 'widgets.dart';
 import 'glass.dart';
+import 'screens/audio_lab_screen.dart' show AudioLabScreen;
 import 'screens/dj_screen.dart';
+import 'song_menu.dart' show showSongMenu;
 
 // ── Player pieces: volume, bottom row, output sheet, pipeline, Cast ───────
 
@@ -1140,95 +1139,16 @@ Future<void> showCastDialog(BuildContext context) {
 
 // ── ⋯ in the player ─────────────────────────────────────────────────────
 
+/// Player ⋯ → Audio Lab: opens the Audio Lab page over the player (back returns to it).
+void openAudioLabFromPlayer(BuildContext context) =>
+    Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => const AudioLabScreen()));
+
 /// Player ⋯ → DJ: opens the DJ page over the player.
 void openDjFromPlayer(BuildContext context) =>
     Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => const DjScreen()));
 
-Future<void> showPlayerMore(BuildContext context, Item it) {
-  final s = Services.i;
-  return showByteSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: const Color(0xFF1C1C1E), // white text: dark glass from wherever it is opened
-    builder: (c) {
-      Widget row(IconData i, String t, VoidCallback onTap, {String? sub}) => ListTile(
-        leading: Icon(i, color: Colors.white),
-        title: Text(
-          t,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        subtitle: sub == null ? null : Text(sub, style: const TextStyle(color: Colors.white60)),
-        onTap: () {
-          Navigator.pop(c);
-          onTap();
-        },
-      );
-      final (sleepMode, _) = s.player.sleep.value;
-      return SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: Artwork(it.thumb, size: 44, radius: 6),
-                title: Text(
-                  it.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
-                ),
-                subtitle: Text(
-                  it.artistLine,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white60),
-                ),
-              ),
-              const Divider(color: Colors.white12, height: 1),
-              // 1.4.4: the same liked state as the heart beside ⋯ on Now Playing
-              row(
-                s.library.isLiked(it.id) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                s.library.isLiked(it.id) ? 'Remove from Liked' : 'Like',
-                () => s.library.setLiked(it, !s.library.isLiked(it.id)),
-              ),
-              if (!s.dj.active)
-                row(Icons.graphic_eq_rounded, 'Start DJ', () {
-                  s.dj.start();
-                  toast(context, 'DJ is starting…');
-                }, sub: 'Non-stop mix from what you play')
-              else
-                row(Icons.graphic_eq_rounded, 'DJ', () => openDjFromPlayer(context), sub: 'Talk to your DJ, switch it up, stop'),
-              row(Icons.playlist_add_rounded, 'Add to playlist', () => addToPlaylistSheet(context, [it])),
-              if (!it.isLocal && s.downloads.supported && !s.library.isDownloaded(it.id))
-                row(Icons.download_rounded, 'Download', () {
-                  s.downloads.enqueue([it]);
-                  toast(context, 'Downloading…');
-                }),
-              row(
-                sleepMode == SleepMode.off ? Icons.bedtime_outlined : Icons.bedtime_rounded,
-                'Sleep timer',
-                () => showSleepSheet(context),
-                sub: sleepMode == SleepMode.off ? null : 'On',
-              ),
-              row(Icons.speed_rounded, 'Playback speed', () => showSpeedSheet(context), sub: '${s.settings.speed}×'),
-              row(Icons.info_outline_rounded, 'Song info', () => showSongInfo(context, it), sub: 'Release year, your plays and listening time'),
-              row(
-                s.party.active ? Icons.people_rounded : Icons.people_outline_rounded,
-                'Listen together',
-                () => openListenTogether(context),
-                sub: s.party.active ? 'In a party' : 'Play the same song with friends',
-              ),
-              if (!it.isLocal)
-                row(Icons.ios_share_rounded, 'Share', () => SharePlus.instance.share(ShareParams(text: '${it.title} — ${it.artistLine}\n${shareUrlFor(it)}'))),
-              row(Icons.more_horiz_rounded, 'More options', () => showItemMenu(context, it)),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      );
-    },
-  );
-}
+/// The player's ⋯ menu (see song_menu.dart).
+Future<void> showPlayerMore(BuildContext context, Item it) => showSongMenu(context, it);
 
 /// Kept so tests can reach the cast controller type from here.
 typedef PlayerCast = CastController;
