@@ -1,0 +1,45 @@
+run 42093838662 build errors:
+798:[+1619 ms] C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> are
+935:[   +3 ms] Build FAILED.
+941:[        ]   C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> a
+947:[   +1 ms] Build process failed.
+949:           #0      throwToolExit (package:flutter_tools/src/base/common.dart:34:3)
+--- before the stack
+936-[        ] "D:\a\byte\byte\build\windows\x64\INSTALL.vcxproj" (default target) (1) ->
+937-[        ] "D:\a\byte\byte\build\windows\x64\ALL_BUILD.vcxproj" (default target) (3) ->
+938-[        ] "D:\a\byte\byte\build\windows\x64\runner\Byte.vcxproj" (default target) (4) ->
+939-[        ] "D:\a\byte\byte\build\windows\x64\plugins\just_audio_windows\just_audio_windows_plugin.vcxproj" (default target) (10) ->
+940-[        ] (ClCompile target) -> 
+941-[        ]   C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> a
+942-[        ]     0 Warning(s)
+943-[        ]     1 Error(s)
+944-[        ] Time Elapsed 00:02:18.62
+945-[  +24 ms] Building Windows application... (completed in 179.0s)
+946-[        ] "flutter windows" took 181,092ms.
+947-[   +1 ms] Build process failed.
+948-[        ] 
+949-           #0      throwToolExit (package:flutter_tools/src/base/common.dart:34:3)
+950:           #1      _runBuild (package:flutter_tools/src/windows/build_windows.dart:262:5)
+
+--- tail
+ner.dart:212:13)
+           <asynchronous suspension>
+           #7      FlutterCommandRunner.runCommand.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:496:9)
+           <asynchronous suspension>
+           #8      AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+           <asynchronous suspension>
+           #9      FlutterCommandRunner.runCommand (package:flutter_tools/src/runner/flutter_command_runner.dart:431:5)
+           <asynchronous suspension>
+           #10     FlutterCommandRunner.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:307:33)
+           <asynchronous suspension>
+           #11     run.<anonymous closure>.<anonymous closure> (package:flutter_tools/runner.dart:104:11)
+           <asynchronous suspension>
+           #12     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+           <asynchronous suspension>
+           #13     main (package:flutter_tools/executable.dart:103:3)
+           <asynchronous suspension>
+
+
+[        ] Running 1 shutdown hook
+[        ] Shutdown hooks complete
+[        ] exiting with code 1
