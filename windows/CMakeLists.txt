@@ -41,7 +41,7 @@ function(APPLY_STANDARD_SETTINGS TARGET)
   # C++20: the Windows media plugin's WinRT headers need <coroutine> (newer MSVC drops the experimental header).
   target_compile_features(${TARGET} PUBLIC cxx_std_20)
   # Warnings stay on, but no longer fail the build (newer MSVC warns inside Flutter's own wrapper).
-  target_compile_options(${TARGET} PRIVATE /W4 /wd"4100")
+  target_compile_options(${TARGET} PRIVATE /W4 /wd"4100" /permissive)
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
