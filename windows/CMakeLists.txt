@@ -38,7 +38,8 @@ add_definitions(-DUNICODE -D_UNICODE)
 # default. In most cases, you should add new options to specific targets instead
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
-  target_compile_features(${TARGET} PUBLIC cxx_std_17)
+  # C++20: the Windows media plugin's WinRT headers need <coroutine> (newer MSVC drops the experimental header).
+  target_compile_features(${TARGET} PUBLIC cxx_std_20)
   # Warnings stay on, but no longer fail the build (newer MSVC warns inside Flutter's own wrapper).
   target_compile_options(${TARGET} PRIVATE /W4 /wd"4100")
   target_compile_options(${TARGET} PRIVATE /EHsc)
