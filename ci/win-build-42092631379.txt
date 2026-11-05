@@ -1,0 +1,47 @@
+run 42092631379 build errors:
+799:[+2281 ms] C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> are
+825:[+2960 ms] C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> are
+933:[   +3 ms] Build FAILED.
+945:[        ]   C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> a
+950:[        ]   C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> a
+956:[   +2 ms] Build process failed.
+958:           #0      throwToolExit (package:flutter_tools/src/base/common.dart:34:3)
+--- before the stack
+945-[        ]   C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> a
+946-[        ] "D:\a\byte\byte\build\windows\x64\INSTALL.vcxproj" (default target) (1) ->
+947-[        ] "D:\a\byte\byte\build\windows\x64\ALL_BUILD.vcxproj" (default target) (3) ->
+948-[        ] "D:\a\byte\byte\build\windows\x64\runner\Byte.vcxproj" (default target) (4) ->
+949-[        ] "D:\a\byte\byte\build\windows\x64\plugins\permission_handler_windows\permission_handler_windows_plugin.vcxproj" (default target) (11) ->
+950-[        ]   C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> a
+951-[        ]     1 Warning(s)
+952-[        ]     2 Error(s)
+953-[        ] Time Elapsed 00:02:43.40
+954-[  +32 ms] Building Windows application... (completed in 208.7s)
+955-[   +1 ms] "flutter windows" took 210,578ms.
+956-[   +2 ms] Build process failed.
+957-[        ] 
+958-           #0      throwToolExit (package:flutter_tools/src/base/common.dart:34:3)
+959:           #1      _runBuild (package:flutter_tools/src/windows/build_windows.dart:262:5)
+
+--- tail
+ner.dart:212:13)
+           <asynchronous suspension>
+           #7      FlutterCommandRunner.runCommand.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:496:9)
+           <asynchronous suspension>
+           #8      AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+           <asynchronous suspension>
+           #9      FlutterCommandRunner.runCommand (package:flutter_tools/src/runner/flutter_command_runner.dart:431:5)
+           <asynchronous suspension>
+           #10     FlutterCommandRunner.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:307:33)
+           <asynchronous suspension>
+           #11     run.<anonymous closure>.<anonymous closure> (package:flutter_tools/runner.dart:104:11)
+           <asynchronous suspension>
+           #12     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+           <asynchronous suspension>
+           #13     main (package:flutter_tools/executable.dart:103:3)
+           <asynchronous suspension>
+
+
+[        ] Running 1 shutdown hook
+[        ] Shutdown hooks complete
+[        ] exiting with code 1
