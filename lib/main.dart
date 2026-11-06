@@ -87,7 +87,13 @@ Future<void> main() async {
   if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux)) {
     try {
       await windowManager.ensureInitialized();
-      AppFullscreen.desktopHook = (on) => windowManager.setFullScreen(on);
+      AppFullscreen.desktopHook = (on) async {
+        await windowManager.setFullScreen(on);
+        // the new size reaches the picture on the next frames: ask for a few so the lyrics fill it at once
+        for (final ms in [80, 400, 1000]) {
+          Future<void>.delayed(Duration(milliseconds: ms), () => WidgetsBinding.instance.scheduleForcedFrame());
+        }
+      };
     } catch (_) {
       // no window plugin here: the lyrics fill the window as before
     }

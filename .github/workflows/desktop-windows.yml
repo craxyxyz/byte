@@ -104,6 +104,8 @@ jobs:
           if [ -f out/smoke/screen.png ]; then SHOT=$(up out/smoke/screen.png); fi
           FSHOT="none"
           if [ -f out/fullscreen/fullscreen.png ]; then FSHOT=$(up out/fullscreen/fullscreen.png); fi
+          FSHOT2="none"
+          if [ -f out/fullscreen/fullscreen-later.png ]; then FSHOT2=$(up out/fullscreen/fullscreen-later.png); fi
           SHA=$(sha256sum out/Byte-2.0.0.2006-windows-x64.zip | cut -d' ' -f1)
           SIZE=$(stat -c %s out/Byte-2.0.0.2006-windows-x64.zip)
           {
@@ -112,6 +114,7 @@ jobs:
             echo "pass $PASS"
             echo "shot $SHOT"
             echo "fullscreen shot $FSHOT"
+            echo "fullscreen later shot $FSHOT2"
             cat out/verify.txt 2>/dev/null | head -c 1000
             echo "--- smoke"; cat out/smoke/smoke.txt 2>/dev/null | head -c 800
             echo "--- audio"; cat out/audio/audio.txt 2>/dev/null | head -c 1600
@@ -142,6 +145,7 @@ jobs:
             out/Byte-2.0.0.2006-windows-x64.zip
             out/smoke/screen.png
             out/fullscreen/fullscreen.png
+            out/fullscreen/fullscreen-later.png
             out/fullscreen/result.txt
           if-no-files-found: warn
           retention-days: 14

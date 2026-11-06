@@ -66,6 +66,24 @@ void main() {
         lines.add('screenshot failed: $e');
       }
     }
+    // a few frames later (the picture may lag the window on a computer with no graphics card)
+    await tester.runAsync(() async {
+      for (var i = 0; i < 3; i++) {
+        WidgetsBinding.instance.scheduleForcedFrame();
+        await Future<void>.delayed(const Duration(seconds: 1));
+      }
+    });
+    await tester.pump();
+    final later = await windowManager.getBounds();
+    lines.add('full, later: full=${await windowManager.isFullScreen()} bounds=${later.left.round()},${later.top.round()} ${later.width.round()}x${later.height.round()}');
+    if (dir != null) {
+      try {
+        await tester.runAsync(() => _screenshot('$dir${Platform.pathSeparator}fullscreen-later.png'));
+        lines.add('later screenshot saved');
+      } catch (e) {
+        lines.add('later screenshot failed: $e');
+      }
+    }
 
     await tester.runAsync(() async {
       await AppFullscreen.exit();
