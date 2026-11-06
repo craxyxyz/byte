@@ -1,0 +1,24 @@
+macos run 42279759539
+zip-enc https://filebin.net/byte-42279759539-64a66e7a/byte-mac.enc
+pass 357a5159b786baeb8484b599c75d12ba8194800c3ce25a09
+CFBundleName=Byte
+CFBundleShortVersionString=2.0.0
+CFBundleVersion=2006
+arch: Architectures in the fat file: build/macos/Build/Products/Release/Byte.app/Contents/MacOS/Byte are: x86_64 arm64 
+copyright: © 2026 Apurba Laskar
+forbidden-name hits: 0
+zip bytes 26943511 sha256 1fcc285d7100cfbc875d70a199d34a4d7ed7bddadc444cee3f49ec9b5faf6f86
+ 66357990                     121 files
+--- audio
+--- audio devices
+Audio:
+    Devices:
+        Null Audio Device:
+          Default Input Device: Yes
+          Default Output Device: Yes
+          Default System Output Device: Yes
+          Output Channels: 2
+          Transport: Virtual
+          Output Source: Data Source Item 0
+afplay exit 0 after 3 s (system speech through the default output)
+Byte is running after 25 s
