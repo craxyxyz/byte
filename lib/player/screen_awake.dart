@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'screen_awake_stub.dart' if (dart.library.js_interop) 'screen_awake_web.dart' as web;
+import 'screen_awake_desktop_stub.dart' if (dart.library.io) 'screen_awake_win.dart' as desktop;
 
 /// Keeps the phone's screen from turning off while someone needs to see it
 /// (the lyrics screen). Android: FLAG_KEEP_SCREEN_ON on the app's window (no
@@ -46,6 +47,9 @@ class ScreenAwake {
       }
       if (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) {
         await channel.invokeMethod('keepScreenOn', on);
+      } else if (defaultTargetPlatform == TargetPlatform.windows) {
+        // 2.0.6: the same rule on a computer: the display stays on while the lyrics are up.
+        desktop.setDesktopScreenOn(on);
       }
     } catch (_) {
       // An old phone or browser without it: the screen simply sleeps as usual.

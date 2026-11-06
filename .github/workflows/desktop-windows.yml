@@ -78,6 +78,18 @@ jobs:
         run: |
           & "$env:GITHUB_WORKSPACE\.github\scripts\windows-audio-probe.ps1" -Out "$env:GITHUB_WORKSPACE\out\audio"
 
+      - name: Full screen on the runner (window plugin, screenshot of the full-screen window)
+        continue-on-error: true
+        shell: pwsh
+        timeout-minutes: 25
+        env:
+          BYTE_FS_DIR: ${{ github.workspace }}\out\fullscreen
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:BYTE_FS_DIR" | Out-Null
+          flutter test integration_test/windows_fullscreen_test.dart -d windows *> "$env:BYTE_FS_DIR\flutter-test.log"
+          "flutter test exit code $LASTEXITCODE" | Out-File -Encoding utf8 "$env:BYTE_FS_DIR\exit.txt"
+          Get-Content "$env:BYTE_FS_DIR\flutter-test.log" -Tail 25
+
       - name: Publish the results (run notices, ci-logs branch, encrypted temp host)
         shell: bash
         env:
@@ -85,21 +97,25 @@ jobs:
         run: |
           RUN=${{ github.run_id }}
           PASS=$(openssl rand -hex 24)
-          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS -in out/Byte-2.0.0-windows-x64.zip -out out/byte-win.enc
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS -in out/Byte-2.0.0.2006-windows-x64.zip -out out/byte-win.enc
           up() { BIN="byte-$RUN-$(openssl rand -hex 4)"; N=$(basename "$1"); curl -s -m 900 -X POST --data-binary @"$1" -H 'Content-Type: application/octet-stream' "https://filebin.net/$BIN/$N" > /dev/null && echo "https://filebin.net/$BIN/$N" || echo failed; }
           ZIPURL=$(up out/byte-win.enc)
           SHOT="none"
           if [ -f out/smoke/screen.png ]; then SHOT=$(up out/smoke/screen.png); fi
-          SHA=$(sha256sum out/Byte-2.0.0-windows-x64.zip | cut -d' ' -f1)
-          SIZE=$(stat -c %s out/Byte-2.0.0-windows-x64.zip)
+          FSHOT="none"
+          if [ -f out/fullscreen/fullscreen.png ]; then FSHOT=$(up out/fullscreen/fullscreen.png); fi
+          SHA=$(sha256sum out/Byte-2.0.0.2006-windows-x64.zip | cut -d' ' -f1)
+          SIZE=$(stat -c %s out/Byte-2.0.0.2006-windows-x64.zip)
           {
             echo "run $RUN zip sha256 $SHA bytes $SIZE"
             echo "zip-enc $ZIPURL"
             echo "pass $PASS"
             echo "shot $SHOT"
+            echo "fullscreen shot $FSHOT"
             cat out/verify.txt 2>/dev/null | head -c 1000
             echo "--- smoke"; cat out/smoke/smoke.txt 2>/dev/null | head -c 800
             echo "--- audio"; cat out/audio/audio.txt 2>/dev/null | head -c 1600
+            echo "--- fullscreen"; cat out/fullscreen/result.txt 2>/dev/null | head -c 800; cat out/fullscreen/exit.txt 2>/dev/null
           } > report.txt
           # 1) run notices (readable through the API): packed into a few long lines
           python3 - <<'PY'
@@ -123,9 +139,11 @@ jobs:
         with:
           name: Byte-Windows-2.0.0
           path: |
-            out/Byte-2.0.0-windows-x64.zip
+            out/Byte-2.0.0.2006-windows-x64.zip
             out/smoke/screen.png
-          if-no-files-found: error
+            out/fullscreen/fullscreen.png
+            out/fullscreen/result.txt
+          if-no-files-found: warn
           retention-days: 14
 
   macos:
@@ -191,9 +209,9 @@ jobs:
           grep -ril -E 'bitchord|mochy' $APP > out/hits.txt 2>/dev/null || true
           echo "forbidden-name hits: $(wc -l < out/hits.txt | tr -d ' ')" >> out/verify.txt
           head -3 out/hits.txt | sed 's|.*/Contents/|hit: |' >> out/verify.txt
-          ditto -c -k --sequesterRsrc --keepParent $APP out/Byte-2.0.0-macos.zip
-          echo "zip bytes $(stat -f %z out/Byte-2.0.0-macos.zip) sha256 $(shasum -a 256 out/Byte-2.0.0-macos.zip | cut -d' ' -f1)" >> out/verify.txt
-          unzip -l out/Byte-2.0.0-macos.zip | tail -1 >> out/verify.txt
+          ditto -c -k --sequesterRsrc --keepParent $APP out/Byte-2.0.0.2006-macos.zip
+          echo "zip bytes $(stat -f %z out/Byte-2.0.0.2006-macos.zip) sha256 $(shasum -a 256 out/Byte-2.0.0.2006-macos.zip | cut -d' ' -f1)" >> out/verify.txt
+          unzip -l out/Byte-2.0.0.2006-macos.zip | tail -1 >> out/verify.txt
 
       - name: Launch and audio evidence (macOS)
         shell: bash
@@ -221,7 +239,7 @@ jobs:
         run: |
           RUN=${{ github.run_id }}
           PASS=$(openssl rand -hex 24)
-          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS -in out/Byte-2.0.0-macos.zip -out out/byte-mac.enc
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS -in out/Byte-2.0.0.2006-macos.zip -out out/byte-mac.enc
           up() { BIN="byte-$RUN-$(openssl rand -hex 4)"; N=$(basename "$1"); curl -s -m 900 -X POST --data-binary @"$1" -H 'Content-Type: application/octet-stream' "https://filebin.net/$BIN/$N" > /dev/null && echo "https://filebin.net/$BIN/$N" || echo failed; }
           ZIPURL=$(up out/byte-mac.enc)
           { echo "macos run $RUN"; echo "zip-enc $ZIPURL"; echo "pass $PASS"; cat out/verify.txt | head -c 900; echo "--- audio"; cat out/audio/audio.txt | head -c 1200; } > report.txt
@@ -242,6 +260,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Byte-macOS-2.0.0
-          path: out/Byte-2.0.0-macos.zip
+          path: out/Byte-2.0.0.2006-macos.zip
           if-no-files-found: error
           retention-days: 14

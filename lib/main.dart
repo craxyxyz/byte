@@ -6,8 +6,10 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_ce_flutter/hive_ce_flutter.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
+import 'ui/app_fullscreen.dart';
 import 'ui/screens/settings_pages.dart' show applyRefreshRate;
 import 'package:path_provider/path_provider.dart';
 import 'core/cover_cache.dart';
@@ -78,6 +80,18 @@ Future<void> main() async {
     } catch (_) {}
   }
   CrashLog.install(CrashLog(dir: logDir, version: () => Brand.version));
+  // 2.0.6 (Apurba, Nov 6: "lyrics pe windows keh upar niche sab bar hat jayeh"):
+  // full-screen lyrics put the computer window in real full screen (title bar
+  // and taskbar / dock gone) and give it back when the lyrics close. The window
+  // plugin is only wired on the computer builds.
+  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux)) {
+    try {
+      await windowManager.ensureInitialized();
+      AppFullscreen.desktopHook = (on) => windowManager.setFullScreen(on);
+    } catch (_) {
+      // no window plugin here: the lyrics fill the window as before
+    }
+  }
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(systemNavigationBarColor: Colors.transparent, statusBarColor: Colors.transparent));
 
