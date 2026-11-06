@@ -1,0 +1,64 @@
+run 42282450683 zip sha256 d737aa52762b669823cb330b23481b3eca9612623555db4f81f6087eda8fd474 bytes 16641659
+zip-enc https://filebin.net/byte-42282450683-76eef328/byte-win.enc
+pass b6a972b99a5e7312e3c4d58adf86d53040e125bea940433b
+shot https://filebin.net/byte-42282450683-91dee358/screen.png
+fullscreen shot https://filebin.net/byte-42282450683-eb54d9c3/fullscreen.png
+fullscreen later shot https://filebin.net/byte-42282450683-2e36e3d5/fullscreen-later.png
+exe bytes: 118784
+FileVersion=2.0.0+2006 ProductVersion=2.0.0+2006 ProductName=Byte CompanyName=Apurba Laskar FileDescription=Byte OriginalFilename=Byte.exe
+LegalCopyright=Copyright (C) 2026 Apurba Laskar
+forbidden or secret-like hits: 0
+zip entries: 45, uncompressed bytes: 39317655, Byte/Byte.exe present: 1 (every entry read, CRC checked)
+zip bytes: 16641659
+zip sha256: d737aa52762b669823cb330b23481b3eca9612623555db4f81f6087eda8fd474
+top level in zip folder:
+  data 1
+  Byte.exe 118784
+  connectivity_plus_plugin.dll 102400
+  dartjni.dll 58368
+  flutter_secure_storage_windows_plugin.dll 158208
+  flutter_windows.dll 21289472
+  just_audio_windows_plugin.dll 183296
+  permission_handler_windows_plugin.dll 116736
+  README.txt 158
+  screen_retriever_windows_plugin.dll 121856
+  share_plus_plugin.dll 133632
+  speech_to_text_windows_plugin.dll 97792
+  url_launcher_windows_plugin.dll 98816
+  window_manager_plugin.dll 131584
+--- smoke
+started Byte.exe pid 8280
+still running after 30 s: True
+main window title: 'Byte'
+screenshot 1024x768 saved
+stopped Byte.exe
+--- audio
+audio endpoints (Win32_SoundDevice): 0
+Audiosrv: Running
+tone written: 529244 bytes, 440 Hz, 6 s, 16-bit mono 44.1 kHz
+t=0 state=Opening position=0 duration=0 volume=1 muted=False
+t=0.5 state=Opening position=0 duration=0 volume=1 muted=False
+t=1 state=Opening position=0 duration=0 volume=1 muted=False
+t=1.5 state=Opening position=0 duration=0 volume=1 muted=False
+t=2 state=None position=0 duration=0 volume=1 muted=False
+t=2.5 state=None position=0 duration=0 volume=1 muted=False
+t=3 state=None position=0 duration=0 volume=1 muted=False
+t=3.5 state=None position=0 duration=0 volume=1 muted=False
+t=4 state=None position=0 duration=0 volume=1 muted=False
+t=4.5 state=None position=0 duration=0 volume=1 muted=False
+t=5 state=None position=0 duration=0 volume=1 muted=False
+t=5.5 state=None position=0 duration=0 volume=1 muted=False
+t=6 state=None position=0 duration=0 volume=1 muted=False
+t=6.5 state=None position=0 duration=0 volume=1 muted=False
+t=7 state=None position=0 duration=0 volume=1 muted=False
+t=7.5 state=None position=0 duration=0 volume=1 muted=False
+player disposed
+--- fullscreen
+screen 1024x768 logical
+before: full=false bounds=10,10 1044x720
+full: full=true bounds=0,0 1024x768
+screenshot saved
+full, later: full=true bounds=0,0 1024x768
+later screenshot saved
+back: full=false bounds=10,10 1044x720
+flutter test exit code 0
