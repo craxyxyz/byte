@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleListener;
 
 import 'app_fullscreen_stub.dart' if (dart.library.js_interop) 'app_fullscreen_web.dart' as web;
+import 'win_fullscreen_stub.dart' if (dart.library.io) 'win_fullscreen.dart' as winfs;
 
 /// What can put the window in full screen. The real one picks the platform's
 /// way; tests hand in a fake.
@@ -23,10 +24,7 @@ class _PlatformFullscreen implements WindowFullscreen {
   @override
   Future<void> set(bool on) async {
     if (kIsWeb) return web.setBrowserFullscreen(on);
-    final desktop = defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.linux;
-    if (desktop) {
+    if (AppFullscreen.isDesktop) {
       final hook = AppFullscreen.desktopHook;
       if (hook != null) await hook(on);
       return;
@@ -42,9 +40,25 @@ class _PlatformFullscreen implements WindowFullscreen {
 class AppFullscreen {
   AppFullscreen._();
 
+  /// A computer build (Windows, macOS, Linux) — not the web, a phone or a tablet.
+  static bool get isDesktop =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.linux);
+
   /// Set by the desktop app at start (the window plugin lives in the desktop
   /// build only): true = real full screen, false = back to how it was.
   static Future<void> Function(bool on)? desktopHook;
+
+  /// Windows: the window's own full screen (no caption, no frame, the whole
+  /// monitor; exit puts back the exact window). Throws where Windows refuses.
+  static Future<void> setWindowsFullScreen(bool on) => winfs.setFullScreen(on);
+
+  /// Windows diagnostics for the runner check: style bits, window and monitor rectangles.
+  static int windowsStyle() => winfs.currentStyle();
+  static List<int> windowsRect() => winfs.windowRect();
+  static List<int> windowsMonitorRect() => winfs.monitorRect();
 
   /// Phone/tablet: the player itself wants the bars hidden ("Hide status bar
   /// in player"), so leaving full-screen lyrics keeps them hidden.

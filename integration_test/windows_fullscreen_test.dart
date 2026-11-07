@@ -1,9 +1,10 @@
 // Byte © 2026 Apurba Laskar
 // Runs on the Windows runner (flutter test integration_test/windows_fullscreen_test.dart -d windows):
-// the real window plugin and Byte's own full-screen switch take the window to
-// full screen and give it back, and the window's size and place come back.
-// When BYTE_FS_DIR is set, it also saves a screenshot of the full-screen window
-// and a result file there.
+// Byte's own Windows full screen takes the frame off the window (no caption, no
+// border), puts it on the whole monitor, and gives back the exact style and place
+// it had. When BYTE_FS_DIR is set it also saves screenshots of the full-screen
+// window, reads the top and bottom 4 pixel rows of each (they must be the page's
+// dark background, not white), and writes a result file there.
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -11,7 +12,10 @@ import 'package:byte/ui/app_fullscreen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:window_manager/window_manager.dart';
+
+const int _wsCaption = 0x00C00000;
+const int _wsThickFrame = 0x00040000;
+const int _wsBorder = 0x00800000;
 
 Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 1500));
 
@@ -27,13 +31,21 @@ Future<void> _screenshot(String path) async {
   if (r.exitCode != 0) throw StateError('screenshot exit ${r.exitCode}: ${r.stderr}');
 }
 
+/// Average brightness (0 black .. 255 white) of the top 4 and bottom 4 pixel rows of a PNG.
+Future<String> _edges(String path) async {
+  final esc = path.replaceAll("'", "''");
+  final script = r'''Add-Type -AssemblyName System.Drawing; $bmp=[System.Drawing.Bitmap]::FromFile('ESC'); $w=$bmp.Width; $h=$bmp.Height; function Avg($y0,$y1){ $s=0.0; $n=0; for($y=$y0;$y -lt $y1;$y++){ for($x=0;$x -lt $w;$x+=4){ $c=$bmp.GetPixel($x,$y); $s+=($c.R+$c.G+$c.B)/3.0; $n++ } }; [math]::Round($s/$n,1) }; "top4=$(Avg 0 4) bottom4=$(Avg ($h-4) $h) size=${w}x${h}"; $bmp.Dispose()'''.replaceFirst('ESC', esc);
+  final r = await Process.run('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script]);
+  return r.exitCode == 0 ? '${r.stdout}'.trim() : 'pixel check failed: ${r.stderr}';
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Windows: full screen takes the window over and gives it back', (tester) async {
-    await windowManager.ensureInitialized();
-    AppFullscreen.desktopHook = (on) => windowManager.setFullScreen(on);
+  testWidgets('Windows: full screen takes the frame off the window and gives it back', (tester) async {
+    AppFullscreen.desktopHook = (on) => AppFullscreen.setWindowsFullScreen(on);
     AppFullscreen.window = AppFullscreen.platform;
+    AppFullscreen.active.value = false;
     final dir = Platform.environment['BYTE_FS_DIR'];
     final lines = <String>[];
     await tester.pumpWidget(const MaterialApp(
@@ -46,22 +58,23 @@ void main() {
     final view = ui.PlatformDispatcher.instance.views.first;
     final screenW = view.display.size.width / view.display.devicePixelRatio;
     final screenH = view.display.size.height / view.display.devicePixelRatio;
-    final before = await windowManager.getBounds();
-    final wasFull = await windowManager.isFullScreen();
+    final beforeRect = AppFullscreen.windowsRect();
+    final beforeStyle = AppFullscreen.windowsStyle();
     lines.add('screen ${screenW.round()}x${screenH.round()} logical');
-    lines.add('before: full=$wasFull bounds=${before.left.round()},${before.top.round()} ${before.width.round()}x${before.height.round()}');
+    lines.add('before: rect=$beforeRect style=0x${beforeStyle.toRadixString(16)}');
 
     await tester.runAsync(() async {
       await AppFullscreen.enter();
       await _settle();
     });
-    final fullOn = await windowManager.isFullScreen();
-    final during = await windowManager.getBounds();
-    lines.add('full: full=$fullOn bounds=${during.left.round()},${during.top.round()} ${during.width.round()}x${during.height.round()}');
+    final fullRect = AppFullscreen.windowsRect();
+    final fullMon = AppFullscreen.windowsMonitorRect();
+    final fullStyle = AppFullscreen.windowsStyle();
+    lines.add('full: active=${AppFullscreen.active.value} rect=$fullRect monitor=$fullMon style=0x${fullStyle.toRadixString(16)}');
     if (dir != null) {
       try {
         await tester.runAsync(() => _screenshot('$dir${Platform.pathSeparator}fullscreen.png'));
-        lines.add('screenshot saved');
+        lines.add('shot ${await tester.runAsync(() => _edges('$dir${Platform.pathSeparator}fullscreen.png'))}');
       } catch (e) {
         lines.add('screenshot failed: $e');
       }
@@ -74,12 +87,12 @@ void main() {
       }
     });
     await tester.pump();
-    final later = await windowManager.getBounds();
-    lines.add('full, later: full=${await windowManager.isFullScreen()} bounds=${later.left.round()},${later.top.round()} ${later.width.round()}x${later.height.round()}');
+    final laterRect = AppFullscreen.windowsRect();
+    lines.add('full, later: rect=$laterRect');
     if (dir != null) {
       try {
         await tester.runAsync(() => _screenshot('$dir${Platform.pathSeparator}fullscreen-later.png'));
-        lines.add('later screenshot saved');
+        lines.add('later shot ${await tester.runAsync(() => _edges('$dir${Platform.pathSeparator}fullscreen-later.png'))}');
       } catch (e) {
         lines.add('later screenshot failed: $e');
       }
@@ -89,19 +102,22 @@ void main() {
       await AppFullscreen.exit();
       await _settle();
     });
-    final fullOff = await windowManager.isFullScreen();
-    final after = await windowManager.getBounds();
-    lines.add('back: full=$fullOff bounds=${after.left.round()},${after.top.round()} ${after.width.round()}x${after.height.round()}');
+    final afterRect = AppFullscreen.windowsRect();
+    final afterStyle = AppFullscreen.windowsStyle();
+    lines.add('back: active=${AppFullscreen.active.value} rect=$afterRect style=0x${afterStyle.toRadixString(16)}');
     if (dir != null) {
       await File('$dir${Platform.pathSeparator}result.txt').writeAsString('${lines.join('\n')}\n');
     }
 
-    expect(fullOn, isTrue, reason: 'the window went full screen');
-    expect(during.width >= screenW - 2 && during.height >= screenH - 2, isTrue, reason: 'it covers the screen (title bar and taskbar gone)');
-    expect(fullOff, isFalse, reason: 'the window left full screen');
-    expect(after.width, closeTo(before.width, 2));
-    expect(after.height, closeTo(before.height, 2));
-    expect(after.left, closeTo(before.left, 2));
-    expect(after.top, closeTo(before.top, 2));
+    expect(AppFullscreen.active.value, isFalse, reason: 'the window left full screen');
+    expect(fullRect.length, 4);
+    expect(fullMon.length, 4);
+    expect(fullRect, fullMon, reason: 'the window covers the whole monitor: its rectangle is the monitor rectangle');
+    expect(fullStyle & _wsCaption, 0, reason: 'no title bar');
+    expect(fullStyle & _wsThickFrame, 0, reason: 'no resize frame');
+    expect(fullStyle & _wsBorder, 0, reason: 'no border');
+    expect(laterRect, fullRect, reason: 'still the monitor a few frames later');
+    expect(afterRect, beforeRect, reason: 'the exact place and size come back');
+    expect(afterStyle, beforeStyle, reason: 'the exact style comes back');
   });
 }

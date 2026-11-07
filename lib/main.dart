@@ -82,20 +82,26 @@ Future<void> main() async {
   CrashLog.install(CrashLog(dir: logDir, version: () => Brand.version));
   // 2.0.6 (Apurba, Nov 6: "lyrics pe windows keh upar niche sab bar hat jayeh"):
   // full-screen lyrics put the computer window in real full screen (title bar
-  // and taskbar / dock gone) and give it back when the lyrics close. The window
-  // plugin is only wired on the computer builds.
-  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux)) {
+  // and taskbar / dock gone) and give it back when the lyrics close.
+  // 2.0.7: on Windows Byte takes the frame off the window itself (the caption,
+  // the border and the system menu go; the window covers the monitor and comes
+  // back exactly as it was); macOS and Linux use the window plugin.
+  if (AppFullscreen.isDesktop) {
+    AppFullscreen.desktopHook = (on) async {
+      if (defaultTargetPlatform == TargetPlatform.windows) {
+        await AppFullscreen.setWindowsFullScreen(on);
+      } else {
+        await windowManager.setFullScreen(on);
+      }
+      // the new size reaches the picture on the next frames: ask for a few so the lyrics fill it at once
+      for (final ms in [80, 400, 1000]) {
+        Future<void>.delayed(Duration(milliseconds: ms), () => WidgetsBinding.instance.scheduleForcedFrame());
+      }
+    };
     try {
       await windowManager.ensureInitialized();
-      AppFullscreen.desktopHook = (on) async {
-        await windowManager.setFullScreen(on);
-        // the new size reaches the picture on the next frames: ask for a few so the lyrics fill it at once
-        for (final ms in [80, 400, 1000]) {
-          Future<void>.delayed(Duration(milliseconds: ms), () => WidgetsBinding.instance.scheduleForcedFrame());
-        }
-      };
     } catch (_) {
-      // no window plugin here: the lyrics fill the window as before
+      // no window plugin here: the Windows switch still works; the others stay in their window
     }
   }
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);

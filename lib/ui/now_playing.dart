@@ -114,6 +114,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   /// again by themselves until they are opened again.
   bool _escaped = false;
 
+  /// Full-screen lyrics (the controls gone) → the window goes full screen;
+  /// it stays so while the lyrics are on screen (a mouse move brings the
+  /// controls back, not the title bar), and leaves with the lyrics, Esc or F11.
+  /// 1.4.5 QA: Esc left full screen; the lyrics don't take the screen
+  /// again by themselves until they are opened again.
   void _syncFullscreen() {
     if (!mounted) return;
     if (!_lyricsOnScreen) _escaped = false;
@@ -130,12 +135,17 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     if (!mounted) return false;
     final wasFull = AppFullscreen.active.value;
     final handled = AppFullscreen.handleKey(e);
-    if (handled && wasFull && e.logicalKey == LogicalKeyboardKey.escape) {
-      // Esc = back to normal: the window and the controls (before, the
-      // controls stayed hidden and the lyrics went full screen again).
-      _escaped = true;
-      _idleTimer?.cancel();
-      LyricsPane.idle.value = false;
+    final leaveKey = e.logicalKey == LogicalKeyboardKey.escape || e.logicalKey == LogicalKeyboardKey.f11;
+    if (handled && leaveKey) {
+      // Esc / F11 give the window back: it stays so until the lyrics are
+      // opened again (F11 may also have taken it in: then it is not held back).
+      _escaped = !AppFullscreen.active.value;
+      if (wasFull && !AppFullscreen.active.value) {
+        // Esc = back to normal: the window and the controls (before, the
+        // controls stayed hidden and the lyrics went full screen again).
+        _idleTimer?.cancel();
+        LyricsPane.idle.value = false;
+      }
     }
     if (handled) setState(() {});
     return handled;
@@ -467,6 +477,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                       onChanged: (t) {
                                         setState(() => sideTab = t);
                                         _poke();
+                                        _syncFullscreen();
                                       },
                                     ),
                                   ),

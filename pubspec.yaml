@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.0.0+2006
+version: 2.0.0+2007
 
 environment:
   sdk: ^3.13.7
@@ -60,8 +60,10 @@ dependencies:
   speech_to_text: ^7.5.0
   just_audio_windows: ^0.2.3
   permission_handler_windows: ^0.2.3
-  # Byte 2.0.6 (desktop): real full screen for the lyrics on Windows and macOS (MIT).
+  # Byte 2.0.6 (desktop): real full screen for the lyrics on macOS and Linux (MIT).
   window_manager: ^0.5.2
+  # Byte 2.0.7 (desktop): the Windows full screen calls user32 directly (BSD-3, already in the tree).
+  ffi: ^2.2.0
 
 # Byte: just_audio with Byte's own balance/mono/crossfeed stage (MIT, see packages/just_audio/LICENSE).
 dependency_overrides:
