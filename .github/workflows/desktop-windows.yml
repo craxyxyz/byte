@@ -172,6 +172,12 @@ jobs:
           for c in chunks[:10]:
               print('::notice title=byte-win::' + c.replace('%', '%25').replace('\r', ''))
           PY
+          # 1b) the sound engine's own lines, whole (the report above is cut to a few KB)
+          if [ -f out/audio2/flutter-test.log ]; then
+            { grep 'AUDIO-CHECK' out/audio2/flutter-test.log; echo '--- exit'; cat out/audio2/exit.txt 2>/dev/null; echo '--- log tail'; tail -c 2500 out/audio2/flutter-test.log; } > out/audio2/checks.txt
+            B2=$(base64 -w0 out/audio2/checks.txt)
+            gh api -X PUT "repos/${{ github.repository }}/contents/ci/audio-$RUN.txt" -f message="sound engine $RUN" -f content="$B2" -f branch=ci-logs > /dev/null 2>&1 && echo "audio ci-logs ok" || echo "audio ci-logs push failed"
+          fi
           # 2) the ci-logs branch
           B=$(base64 -w0 report.txt)
           gh api -X PUT "repos/${{ github.repository }}/contents/ci/win-$RUN.txt" -f message="windows report $RUN" -f content="$B" -f branch=ci-logs > pushout.txt 2>&1 && echo "ci-logs ok" || echo "ci-logs push failed"
