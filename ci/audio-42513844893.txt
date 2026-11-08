@@ -1,0 +1,42 @@
+AUDIO-CHECK plain render ok=true frames=96000 rms=0.21212578318377687 peak=0.29998779296875 err=
+AUDIO-CHECK +12 dB at 440 Hz: rms ratio 3.979 = 12.00 dB
+AUDIO-CHECK -12 dB at 440 Hz: rms ratio 0.251
+AUDIO-CHECK +12 dB at 5 kHz on a 440 Hz tone: rms ratio 1.014
+AUDIO-CHECK mono on a centred tone: rms ratio 1.000
+AUDIO-CHECK engine open: state=ready durMs=2000 error=no audio output 0x80070490
+AUDIO-CHECK after 0.8 s playing: state=ready posMs=0 playing=true error=no audio output 0x80070490
+AUDIO-CHECK overlay init: true
+--- exit
+flutter test exit code 0
+--- log tail
+flite_common 2.5.14 (2.5.15 available)
+  sqflite_darwin 2.4.4+1 (2.4.5 available)
+  synchronized 3.5.0 (3.6.1 available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.4 available)
+  window_manager 0.5.2 (0.6.0 available)
+  xml 6.6.1 (7.1.0 available)
+Got dependencies!
+32 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+
+Building Windows application...                                 
+D:\a\byte\byte\windows\runner\byte_audio\engine_win.cpp(53,25): warning C4245: 'argument': conversion from '__MIDL___MIDL_itf_mfreadwrite_0000_0001_0001' to 'DWORD', signed/unsigned mismatch [D:\a\byte\byte\build\windows\x64\runner\Byte.vcxproj]
+D:\a\byte\byte\windows\runner\byte_audio\engine_win.cpp(54,25): warning C4245: 'argument': conversion from '__MIDL___MIDL_itf_mfreadwrite_0000_0001_0001' to 'DWORD', signed/unsigned mismatch [D:\a\byte\byte\build\windows\x64\runner\Byte.vcxproj]
+D:\a\byte\byte\windows\runner\byte_audio\engine_win.cpp(63,33): warning C4245: 'argument': conversion from '__MIDL___MIDL_itf_mfreadwrite_0000_0001_0001' to 'DWORD', signed/unsigned mismatch [D:\a\byte\byte\build\windows\x64\runner\Byte.vcxproj]
+D:\a\byte\byte\windows\runner\byte_audio\engine_win.cpp(74,9): warning C4245: 'argument': conversion from '__MIDL___MIDL_itf_mfreadwrite_0000_0001_0001' to 'DWORD', signed/unsigned mismatch [D:\a\byte\byte\build\windows\x64\runner\Byte.vcxproj]
+D:\a\byte\byte\windows\runner\byte_audio\engine_win.cpp(101,32): warning C4245: 'argument': conversion from '__MIDL___MIDL_itf_mfreadwrite_0000_0001_0001' to 'DWORD', signed/unsigned mismatch [D:\a\byte\byte\build\windows\x64\runner\Byte.vcxproj]
+Building Windows application...                                    94.2s
+√ Built build\windows\x64\runner\Debug\Byte.exe
+::group::✅ Windows sound engine: decode, equalizer gain, open and ready, overlay
+AUDIO-CHECK plain render ok=true frames=96000 rms=0.21212578318377687 peak=0.29998779296875 err=
+AUDIO-CHECK +12 dB at 440 Hz: rms ratio 3.979 = 12.00 dB
+AUDIO-CHECK -12 dB at 440 Hz: rms ratio 0.251
+AUDIO-CHECK +12 dB at 5 kHz on a 440 Hz tone: rms ratio 1.014
+AUDIO-CHECK mono on a centred tone: rms ratio 1.000
+AUDIO-CHECK engine open: state=ready durMs=2000 error=no audio output 0x80070490
+AUDIO-CHECK after 0.8 s playing: state=ready posMs=0 playing=true error=no audio output 0x80070490
+AUDIO-CHECK overlay init: true
+::endgroup::
+
+🎉 1 test passed.
