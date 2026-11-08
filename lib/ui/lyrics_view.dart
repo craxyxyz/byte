@@ -1,17 +1,21 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../core/models.dart';
 
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../lyrics/dual.dart';
 import '../lyrics/lrc.dart';
+import '../lyrics/lyric_card.dart';
 import '../lyrics/lyrics_service.dart';
 import '../lyrics/romanize.dart';
 import '../lyrics/script.dart';
@@ -613,6 +617,12 @@ class _ShareBar extends StatelessWidget {
           child: const Text('Cancel'),
         ),
         const Spacer(),
+        IconButton(
+          tooltip: 'Lyrics card (picture)',
+          onPressed: count == 0 ? null : () => shareSelectedLyricsCard(context),
+          icon: Icon(Icons.image_outlined, color: color),
+        ),
+        const SizedBox(width: 4),
         FilledButton.icon(
           style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
           onPressed: count == 0 ? null : () => shareSelectedLyrics(),
@@ -624,18 +634,48 @@ class _ShareBar extends StatelessWidget {
   }
 }
 
-/// The picked lines with the song's name, as text.
-String selectedLyricsText() {
+/// The picked lines, in song order.
+List<String> selectedLyricsLines() {
   final l = LyricsPane.shown;
   final sel = LyricsPane.selection.value ?? const <int>{};
-  final it = Services.i.player.current.value;
-  if (l == null || it == null) return '';
+  if (l == null) return const [];
   final lines = l.kind == LyricsKind.synced ? l.lines.map((x) => x.text).toList() : (l.plain ?? '').split('\n');
-  final picked = [
+  return [
     for (final i in sel.toList()..sort())
       if (i < lines.length) lines[i],
   ];
+}
+
+/// The picked lines with the song's name, as text.
+String selectedLyricsText() {
+  final picked = selectedLyricsLines();
+  final it = Services.i.player.current.value;
+  if (it == null) return '';
   return '${picked.join('\n')}\n\n— ${it.title}${it.artistLine.isEmpty ? '' : ' · ${it.artistLine}'}';
+}
+
+/// 2.0.9: the picked lines as a picture (lyrics card). A phone shares the file;
+/// a computer saves it to the Downloads folder and says where.
+Future<void> shareSelectedLyricsCard(BuildContext context) async {
+  final picked = selectedLyricsLines();
+  final it = Services.i.player.current.value;
+  LyricsPane.selection.value = null;
+  if (picked.isEmpty || it == null) return;
+  try {
+    final png = await renderLyricCard(lines: picked, title: it.title, artist: it.artistLine);
+    final name = 'Byte lyrics - ${it.title}'.replaceAll(RegExp(r'[\\/:*?"<>|]'), '').trim();
+    final desktop = defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS;
+    if (desktop) {
+      final dir = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}${Platform.pathSeparator}$name.png');
+      await file.writeAsBytes(png);
+      if (context.mounted) toast(context, 'Lyrics card saved to ${dir.path}');
+    } else {
+      await SharePlus.instance.share(ShareParams(files: [XFile.fromData(png, mimeType: 'image/png', name: '$name.png')]));
+    }
+  } catch (_) {
+    if (context.mounted) toast(context, 'Couldn\'t make the lyrics card');
+  }
 }
 
 Future<void> shareSelectedLyrics() async {

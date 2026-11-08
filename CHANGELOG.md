@@ -2,6 +2,13 @@
 
 © 2026 Apurba Laskar
 
+## 2.0.9 (computer build 2.0.0+2009, Windows)
+
+- Windows: the Audio Lab effects work on a computer now. While an effect is on (equalizer, preamp, reverb, crossfeed, mono, balance, loudness, limiter), songs play through Byte's own sound engine: decode, the chain, then the output device. Normal playback is unchanged; the effects change only what the Audio Lab is set to.
+- Windows: the system media overlay (Windows media controls, lock screen) shows the song's title, artist, album and artwork, and its play, pause, next and previous buttons work. A media key pressed while the overlay is in use acts once.
+- Not on a computer yet: pitch shifting without a speed change, and keep-pitch. Playback speed other than 1 keeps the normal player, so with effects on, speed works only at 1x.
+- Build 2009 for Android (versionCode) and iOS (build number) follows the pubspec.
+
 ## 2.0.8 (computer build 2.0.0+2008, Windows)
 
 - Windows: a setup program (Byte-2.0.0.2008-setup.exe) that installs per user, lists Byte under Installed apps, adds a Start menu entry, and uninstalls cleanly; installing over an older build upgrades it in place.
