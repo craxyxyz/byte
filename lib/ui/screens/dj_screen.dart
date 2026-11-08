@@ -392,9 +392,10 @@ class _PickRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = BytePalette.of(context);
     final it = pick.item;
-    return InkWell(
+    return InkWell(mouseCursor: SystemMouseCursors.click, 
       onTap: onTap,
       onLongPress: () => showItemMenu(context, it),
+      onSecondaryTap: () => showItemMenu(context, it),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
         child: Row(
@@ -477,7 +478,7 @@ class TalkToDjCard extends StatelessWidget {
       child: Material(
         color: p.grouped,
         borderRadius: BorderRadius.circular(16),
-        child: InkWell(
+        child: InkWell(mouseCursor: SystemMouseCursors.click, 
           key: const Key('talkToDj'),
           borderRadius: BorderRadius.circular(16),
           onTap: () => Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => const DjChatScreen())),

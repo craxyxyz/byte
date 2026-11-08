@@ -236,6 +236,7 @@ class _TileRow extends StatelessWidget {
           return Pressable(
             onTap: t.onTap,
             onLongPress: t.onLongPress,
+            onSecondaryTap: t.onLongPress,
             child: SizedBox(
               width: size,
               child: Column(

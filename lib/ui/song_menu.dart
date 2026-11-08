@@ -204,7 +204,7 @@ Future<void> showSongMenu(BuildContext context, Item it) {
         // Share: the big one at the top
         if (catalogue)
           [
-            InkWell(
+            InkWell(mouseCursor: SystemMouseCursors.click, 
               key: const ValueKey('menu-share'),
               onTap: () {
                 Navigator.pop(c);

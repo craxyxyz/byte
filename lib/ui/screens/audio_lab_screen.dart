@@ -110,7 +110,7 @@ class _Chips<T> extends StatelessWidget {
           return Material(
             color: on ? p.accent : p.fill,
             borderRadius: BorderRadius.circular(18),
-            child: InkWell(
+            child: InkWell(mouseCursor: SystemMouseCursors.click, 
               borderRadius: BorderRadius.circular(18),
               onTap: onTap == null
                   ? null
@@ -210,7 +210,7 @@ class _LabCard extends StatelessWidget {
       color: p.grouped,
       borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
+      child: InkWell(mouseCursor: SystemMouseCursors.click, 
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),

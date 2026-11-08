@@ -360,7 +360,7 @@ class SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClien
                 trailing: IconButton(tooltip: 'Remove', icon: Icon(Icons.close_rounded, color: p.secondary), onPressed: () => lib.removeRecentItem(it.id)),
               ),
             for (final w in words)
-              InkWell(
+              InkWell(mouseCursor: SystemMouseCursors.click, 
                 onTap: () => _submit(w),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 6, 4, 6),

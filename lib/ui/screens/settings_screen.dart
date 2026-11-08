@@ -430,7 +430,7 @@ class AccountScreen extends StatelessWidget {
                       enabled: !acc.syncing,
                       onTap: acc.sync,
                     ),
-                    InkWell(
+                    InkWell(mouseCursor: SystemMouseCursors.click, 
                       onTap: () => _signOut(context),
                       child: SizedBox(
                         height: 52,
@@ -440,7 +440,7 @@ class AccountScreen extends StatelessWidget {
                       ),
                     ),
                   ] else
-                    InkWell(
+                    InkWell(mouseCursor: SystemMouseCursors.click, 
                       onTap: () => Navigator.of(context, rootNavigator: true).push(MaterialPageRoute(builder: (_) => const LoginScreen())),
                       child: SizedBox(
                         height: 52,

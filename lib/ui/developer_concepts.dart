@@ -1350,7 +1350,7 @@ class _PressState extends State<_Press> {
           color: widget.color,
           shape: RoundedRectangleBorder(borderRadius: r, side: BorderSide(color: widget.border)),
           clipBehavior: Clip.antiAlias,
-          child: InkWell(
+          child: InkWell(mouseCursor: SystemMouseCursors.click, 
             onTap: widget.onTap,
             onHighlightChanged: (v) => setState(() => _down = v),
             child: widget.child,

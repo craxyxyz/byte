@@ -217,9 +217,10 @@ class SongTile extends StatelessWidget {
   Widget _tile(BuildContext context, BytePalette p, Widget leading, bool isCur, String sub) {
     {
       {
-        return InkWell(
+        return InkWell(mouseCursor: SystemMouseCursors.click, 
           onTap: onTap,
           onLongPress: () => showItemMenu(context, item),
+          onSecondaryTap: () => showItemMenu(context, item),
           child: Padding(
             padding: EdgeInsets.fromLTRB(16, dense ? 5 : 6, 4, dense ? 5 : 6),
             child: Row(
@@ -318,10 +319,11 @@ class ItemCard extends StatelessWidget {
     final w = wide ? width * 1.45 : width;
     return SizedBox(
       width: w,
-      child: InkWell(
+      child: InkWell(mouseCursor: SystemMouseCursors.click, 
         borderRadius: BorderRadius.circular(12),
         onTap: onTap ?? () => openItem(context, item, heroTag: _tag),
         onLongPress: () => showItemMenu(context, item),
+        onSecondaryTap: () => showItemMenu(context, item),
         child: Padding(
           padding: const EdgeInsets.all(4),
           child: Column(
@@ -734,9 +736,10 @@ class ItemRow extends StatelessWidget {
       ItemKind.song => 'Song',
     };
     final sub = (item.subtitle ?? item.line2).trim();
-    return InkWell(
+    return InkWell(mouseCursor: SystemMouseCursors.click, 
       onTap: onTap ?? () => openItem(context, item),
       onLongPress: item.id.startsWith('local:') ? null : () => showItemMenu(context, item),
+      onSecondaryTap: item.id.startsWith('local:') ? null : () => showItemMenu(context, item),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 6, 4, 6),
         child: Row(

@@ -243,6 +243,7 @@ class _PickCardState extends State<PickCard> {
     return Pressable(
       onTap: () => openItem(context, it, heroTag: tag),
       onLongPress: () => showItemMenu(context, it),
+      onSecondaryTap: () => showItemMenu(context, it),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 400),
         decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.circular(14)),

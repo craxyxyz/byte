@@ -350,7 +350,7 @@ class _RoundIcon extends StatelessWidget {
       child: Material(
         color: filled ? ByteColors.brand : p.fill,
         shape: const CircleBorder(),
-        child: InkWell(
+        child: InkWell(mouseCursor: SystemMouseCursors.click, 
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(width: 42, height: 42, child: Icon(icon, size: 22, color: filled ? Colors.white : p.label)),

@@ -633,7 +633,7 @@ class _MatchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = BytePalette.of(context);
     final c = m.chosen;
-    return InkWell(
+    return InkWell(mouseCursor: SystemMouseCursors.click, 
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 6, 10, 6),

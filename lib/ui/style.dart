@@ -273,8 +273,11 @@ class Pressable extends StatefulWidget {
   final Widget child;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+
+  /// A right click on a computer (the same menu as a long press on a phone).
+  final VoidCallback? onSecondaryTap;
   final double scale;
-  const Pressable({super.key, required this.child, this.onTap, this.onLongPress, this.scale = 0.96});
+  const Pressable({super.key, required this.child, this.onTap, this.onLongPress, this.onSecondaryTap, this.scale = 0.96});
   @override
   State<Pressable> createState() => _PressableState();
 }
@@ -283,7 +286,9 @@ class _PressableState extends State<Pressable> {
   bool down = false;
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return MouseRegion(
+      cursor: widget.onTap == null && widget.onLongPress == null ? MouseCursor.defer : SystemMouseCursors.click,
+      child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: widget.onTap == null ? null : (_) => setState(() => down = true),
       onTapCancel: () => setState(() => down = false),
@@ -295,7 +300,9 @@ class _PressableState extends State<Pressable> {
               widget.onTap!();
             },
       onLongPress: widget.onLongPress,
+      onSecondaryTap: widget.onSecondaryTap,
       child: AnimatedScale(scale: down ? widget.scale : 1, duration: const Duration(milliseconds: 140), curve: Curves.easeOut, child: widget.child),
+      ),
     );
   }
 }
@@ -525,7 +532,7 @@ class GroupRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = BytePalette.of(context);
     final fade = enabled ? 1.0 : 0.4;
-    return InkWell(
+    return InkWell(mouseCursor: SystemMouseCursors.click, 
       onTap: enabled ? onTap : null,
       child: Opacity(
         opacity: fade,
@@ -609,7 +616,7 @@ class PlainRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = BytePalette.of(context);
-    return InkWell(
+    return InkWell(mouseCursor: SystemMouseCursors.click, 
       onTap: onTap,
       child: SizedBox(
         height: 58,

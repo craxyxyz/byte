@@ -288,7 +288,7 @@ class _LinkRowState extends State<_LinkRow> {
       scale: down ? 0.97 : 1,
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOut,
-      child: InkWell(
+      child: InkWell(mouseCursor: SystemMouseCursors.click, 
         onTap: widget.onTap,
         onHighlightChanged: (v) => setState(() => down = v),
         splashColor: p.accent.withValues(alpha: 0.10),

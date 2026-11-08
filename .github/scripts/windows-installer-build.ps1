@@ -1,11 +1,11 @@
 # Byte Windows setup program: compile the per-user installer with the Inno Setup compiler on the runner.
-# Also compiles a second copy labelled with the previous build number (2.0.0.2006), used by the
+# Also compiles a second copy labelled with the previous build number (2.0.0.2007), used by the
 # upgrade test (install old, then install new over it). Run from the repository root.
 param(
   [Parameter(Mandatory=$true)][string]$Release,
   [Parameter(Mandatory=$true)][string]$Out,
-  [string]$Version = '2.0.0.2007',
-  [string]$OldVersion = '2.0.0.2006'
+  [string]$Version = '2.0.0.2008',
+  [string]$OldVersion = '2.0.0.2007'
 )
 $ErrorActionPreference = 'Stop'
 New-Item -ItemType Directory -Force -Path $Out | Out-Null

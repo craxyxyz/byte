@@ -2,6 +2,13 @@
 
 © 2026 Apurba Laskar
 
+## 2.0.8 (computer build 2.0.0+2008, Windows)
+
+- Windows: a setup program (Byte-2.0.0.2008-setup.exe) that installs per user, lists Byte under Installed apps, adds a Start menu entry, and uninstalls cleanly; installing over an older build upgrades it in place.
+- Computers: plain arrow keys: ← / → seek 5 s, ↑ / ↓ turn the volume 5 % while a song plays (with nothing playing the arrows still move the focus).
+- Computers: the pointer changes to a hand over buttons and rows, and a right click opens the same menu a long press opens on a phone.
+- Computers: the library's shelf tiles take a right click too.
+
 ## 1.4.6 (2013 arm64 / 1013 armv7)
 
 - Smoothness (phone, tablet, computer): the player no longer redraws the whole screen nonstop. With the player or lyrics open it used to draw every screen refresh (60–120 times a second), playing or paused. Now paused draws nothing, and a playing song's player and lyrics draw about 30 times a second. The cover background is blurred once per song instead of live on every frame; lyric lines and the seek bar have their own layers; the seek bar only redraws when its time changes; long titles scroll only while a song plays. Computers: smooth mouse-wheel scrolling.

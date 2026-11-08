@@ -7,10 +7,10 @@
 ; .github/scripts/windows-installer-build.ps1, which passes the paths below.
 
 #ifndef MyAppVersion
-  #define MyAppVersion "2.0.0.2007"
+  #define MyAppVersion "2.0.0.2008"
 #endif
 #ifndef MyOutputName
-  #define MyOutputName "Byte-2.0.0.2007-setup"
+  #define MyOutputName "Byte-2.0.0.2008-setup"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\build\windows\x64\runner\Release"

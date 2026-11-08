@@ -304,7 +304,7 @@ class _ListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = BytePalette.of(context);
-    return InkWell(
+    return InkWell(mouseCursor: SystemMouseCursors.click, 
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -550,7 +550,7 @@ class _RankRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = BytePalette.of(context);
-    return InkWell(
+    return InkWell(mouseCursor: SystemMouseCursors.click, 
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 6, 16, 6),

@@ -75,7 +75,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 20
         continue-on-error: true
-        run: ./.github/scripts/windows-installer-test.ps1 -Setup out/installer/Byte-2.0.0.2007-setup.exe -OldSetup out/installer/old/Byte-2.0.0.2006-setup-test.exe -Release build/windows/x64/runner/Release -Out out/installer/test
+        run: ./.github/scripts/windows-installer-test.ps1 -Setup out/installer/Byte-2.0.0.2008-setup.exe -OldSetup out/installer/old/Byte-2.0.0.2007-setup-test.exe -Release build/windows/x64/runner/Release -Out out/installer/test
 
       - name: Launch the app (window title, screenshot)
         shell: pwsh
@@ -108,13 +108,13 @@ jobs:
         run: |
           RUN=${{ github.run_id }}
           PASS=$(openssl rand -hex 24)
-          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS -in out/Byte-2.0.0.2007-windows-x64.zip -out out/byte-win.enc
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS -in out/Byte-2.0.0.2008-windows-x64.zip -out out/byte-win.enc
           PASS2=$(openssl rand -hex 24)
           SETUPURL=none; SETUPSHA=none; SETUPSIZE=0; INSTSHOT=none
-          if [ -f out/installer/Byte-2.0.0.2007-setup.exe ]; then
-            openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS2 -in out/installer/Byte-2.0.0.2007-setup.exe -out out/installer/byte-setup.enc
-            SETUPSHA=$(sha256sum out/installer/Byte-2.0.0.2007-setup.exe | cut -d' ' -f1)
-            SETUPSIZE=$(stat -c %s out/installer/Byte-2.0.0.2007-setup.exe)
+          if [ -f out/installer/Byte-2.0.0.2008-setup.exe ]; then
+            openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS2 -in out/installer/Byte-2.0.0.2008-setup.exe -out out/installer/byte-setup.enc
+            SETUPSHA=$(sha256sum out/installer/Byte-2.0.0.2008-setup.exe | cut -d' ' -f1)
+            SETUPSIZE=$(stat -c %s out/installer/Byte-2.0.0.2008-setup.exe)
           fi
           up() { BIN="byte-$RUN-$(openssl rand -hex 4)"; N=$(basename "$1"); curl -s -m 900 -X POST --data-binary @"$1" -H 'Content-Type: application/octet-stream' "https://filebin.net/$BIN/$N" > /dev/null && echo "https://filebin.net/$BIN/$N" || echo failed; }
           ZIPURL=$(up out/byte-win.enc)
@@ -126,8 +126,8 @@ jobs:
           if [ -f out/fullscreen/fullscreen.png ]; then FSHOT=$(up out/fullscreen/fullscreen.png); fi
           FSHOT2="none"
           if [ -f out/fullscreen/fullscreen-later.png ]; then FSHOT2=$(up out/fullscreen/fullscreen-later.png); fi
-          SHA=$(sha256sum out/Byte-2.0.0.2007-windows-x64.zip | cut -d' ' -f1)
-          SIZE=$(stat -c %s out/Byte-2.0.0.2007-windows-x64.zip)
+          SHA=$(sha256sum out/Byte-2.0.0.2008-windows-x64.zip | cut -d' ' -f1)
+          SIZE=$(stat -c %s out/Byte-2.0.0.2008-windows-x64.zip)
           {
             echo "run $RUN zip sha256 $SHA bytes $SIZE"
             echo "zip-enc $ZIPURL"
@@ -168,8 +168,8 @@ jobs:
         with:
           name: Byte-Windows-2.0.0
           path: |
-            out/Byte-2.0.0.2007-windows-x64.zip
-            out/installer/Byte-2.0.0.2007-setup.exe
+            out/Byte-2.0.0.2008-windows-x64.zip
+            out/installer/Byte-2.0.0.2008-setup.exe
             out/installer/test/test.txt
             out/installer/test/launch/screen.png
             out/smoke/screen.png
@@ -242,9 +242,9 @@ jobs:
           grep -ril -E 'bitchord|mochy' $APP > out/hits.txt 2>/dev/null || true
           echo "forbidden-name hits: $(wc -l < out/hits.txt | tr -d ' ')" >> out/verify.txt
           head -3 out/hits.txt | sed 's|.*/Contents/|hit: |' >> out/verify.txt
-          ditto -c -k --sequesterRsrc --keepParent $APP out/Byte-2.0.0.2007-macos.zip
-          echo "zip bytes $(stat -f %z out/Byte-2.0.0.2007-macos.zip) sha256 $(shasum -a 256 out/Byte-2.0.0.2007-macos.zip | cut -d' ' -f1)" >> out/verify.txt
-          unzip -l out/Byte-2.0.0.2007-macos.zip | tail -1 >> out/verify.txt
+          ditto -c -k --sequesterRsrc --keepParent $APP out/Byte-2.0.0.2008-macos.zip
+          echo "zip bytes $(stat -f %z out/Byte-2.0.0.2008-macos.zip) sha256 $(shasum -a 256 out/Byte-2.0.0.2008-macos.zip | cut -d' ' -f1)" >> out/verify.txt
+          unzip -l out/Byte-2.0.0.2008-macos.zip | tail -1 >> out/verify.txt
 
       - name: Launch and audio evidence (macOS)
         shell: bash
@@ -272,7 +272,7 @@ jobs:
         run: |
           RUN=${{ github.run_id }}
           PASS=$(openssl rand -hex 24)
-          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS -in out/Byte-2.0.0.2007-macos.zip -out out/byte-mac.enc
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS -in out/Byte-2.0.0.2008-macos.zip -out out/byte-mac.enc
           up() { BIN="byte-$RUN-$(openssl rand -hex 4)"; N=$(basename "$1"); curl -s -m 900 -X POST --data-binary @"$1" -H 'Content-Type: application/octet-stream' "https://filebin.net/$BIN/$N" > /dev/null && echo "https://filebin.net/$BIN/$N" || echo failed; }
           ZIPURL=$(up out/byte-mac.enc)
           { echo "macos run $RUN"; echo "zip-enc $ZIPURL"; echo "pass $PASS"; cat out/verify.txt | head -c 900; echo "--- audio"; cat out/audio/audio.txt | head -c 1200; } > report.txt
@@ -293,6 +293,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Byte-macOS-2.0.0
-          path: out/Byte-2.0.0.2007-macos.zip
+          path: out/Byte-2.0.0.2008-macos.zip
           if-no-files-found: error
           retention-days: 14

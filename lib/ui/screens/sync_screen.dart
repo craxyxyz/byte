@@ -134,7 +134,7 @@ class _SyncScreenState extends State<SyncScreen> {
         key: key,
         color: bg,
         borderRadius: BorderRadius.circular(14),
-        child: InkWell(
+        child: InkWell(mouseCursor: SystemMouseCursors.click, 
           borderRadius: BorderRadius.circular(14),
           onTap: on ? onTap : null,
           child: SizedBox(
@@ -360,7 +360,7 @@ class _SyncScreenState extends State<SyncScreen> {
         const SizedBox(height: 14),
         GroupCard(
           children: [
-            InkWell(
+            InkWell(mouseCursor: SystemMouseCursors.click, 
               key: const ValueKey('sync-sign-out'),
               onTap: () async {
                 final ok = await showGlassConfirm(context, 'Sign out of sync?', 'Everything stays on this phone. It stops syncing until you sign in again.', 'Sign out');

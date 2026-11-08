@@ -200,7 +200,7 @@ class _Switcher extends StatelessWidget {
 
   Widget _row(BuildContext context, {Key? key, Widget? leading, IconData? icon, required String title, String? sub, Widget? trailing, VoidCallback? onTap}) {
     final p = BytePalette.of(context);
-    return InkWell(
+    return InkWell(mouseCursor: SystemMouseCursors.click, 
       key: key,
       onTap: onTap,
       child: Padding(

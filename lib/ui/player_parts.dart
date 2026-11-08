@@ -417,7 +417,7 @@ class QueueModesPill extends StatelessWidget {
               button: true,
               selected: on,
               label: tip,
-              child: InkWell(
+              child: InkWell(mouseCursor: SystemMouseCursors.click, 
                 borderRadius: BorderRadius.circular(18),
                 onTap: () {
                   HapticFeedback.selectionClick();
@@ -471,7 +471,7 @@ class PlayerContextLine extends StatelessWidget {
               ? (party.isEmpty ? null : party.first)
               : (p.queueModel.position + 1 < p.queueModel.playOrder.length ? p.queueModel.playOrder[p.queueModel.position + 1] : null);
           final text = from ?? (next != null ? 'Next: ${next.title}' : (Services.i.settings.autoplay ? 'Similar songs next' : 'End of queue'));
-          return InkWell(
+          return InkWell(mouseCursor: SystemMouseCursors.click, 
             borderRadius: BorderRadius.circular(8),
             onTap: onTap,
             child: Padding(
@@ -802,7 +802,7 @@ class _OutCard extends StatelessWidget {
   Widget build(BuildContext context) => Material(
     color: Colors.white.withValues(alpha: 0.08),
     borderRadius: BorderRadius.circular(16),
-    child: InkWell(
+    child: InkWell(mouseCursor: SystemMouseCursors.click, 
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
       child: Padding(

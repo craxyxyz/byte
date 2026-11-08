@@ -1712,7 +1712,7 @@ class _QueueRow extends StatelessWidget {
     final p = Services.i.player;
     return Material(
       type: MaterialType.transparency,
-      child: InkWell(
+      child: InkWell(mouseCursor: SystemMouseCursors.click, 
         onTap: index == null ? null : () => p.skipToQueueItem(index!),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
