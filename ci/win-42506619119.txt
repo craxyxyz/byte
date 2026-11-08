@@ -1,0 +1,117 @@
+run 42506619119 zip sha256 0c9986f8bf4a3a9f6dc67f2496727e53ba9e423dabe1d4717f898d19034dd0e8 bytes 16650260
+zip-enc https://filebin.net/byte-42506619119-892d886e/byte-win.enc
+pass 9de15389fb78f0daf1dc7982a844fd57bec1d635a9dedc65
+shot https://filebin.net/byte-42506619119-4406491b/screen.png
+fullscreen shot https://filebin.net/byte-42506619119-b02902a8/fullscreen.png
+fullscreen later shot https://filebin.net/byte-42506619119-b586d7ec/fullscreen-later.png
+setup sha256 8b90cfe589126c3d304c7b77fb84ad3f41ab630d657ddd6bc463d7a25b6e2726 bytes 13876152
+setup-enc https://filebin.net/byte-42506619119-78b9e985/byte-setup.enc
+setup pass b5b063a1ee972d439aa5a1b4f381b5afeac14e66540ae745
+installed-launch shot https://filebin.net/byte-42506619119-139440eb/screen.png
+--- installer build
+compiler: C:\Program Files (x86)\Inno Setup 6\ISCC.exe version 0.0.0.0
+release files: 40, Byte.exe 118784 bytes, file version 2.0.0+2008
+compile Byte-2.0.0.2008-setup exit 0 in 11 s
+Byte-2.0.0.2008-setup.exe bytes: 13876152 sha256: 8b90cfe589126c3d304c7b77fb84ad3f41ab630d657ddd6bc463d7a25b6e2726
+compile Byte-2.0.0.2007-setup-test exit 0 in 3 s
+Byte-2.0.0.2007-setup-test.exe bytes: 16110434 sha256: f89c8e910b7e69915a0d04f84291a717c2b0c094383467dd35e0d75e553c3389
+main setup: D:\a\byte\byte\out\installer\Byte-2.0.0.2008-setup.exe
+old setup (upgrade test): D:\a\byte\byte\out\installer\old\Byte-2.0.0.2007-setup-test.exe
+--- installer test
+1. silent install of the older test build 2.0.0.2007
+PASS  older build installs silently (exit 0)
+PASS  older build put Byte.exe under the per-user programs folder
+PASS  one Installed-apps entry after the older install (found 1)
+PASS  older entry reads version 2.0.0.2007 (reads: 2.0.0.2007)
+2. silent install of 2.0.0.2008 over the older one
+PASS  upgrade install exits 0 (exit 0)
+PASS  one Installed-apps entry after the upgrade (found 1)
+PASS  entry sits at the stable AppId key ({A3967736-04A6-40BC-9D80-86F101275C9D}_is1)
+PASS  DisplayName is Byte (reads: Byte)
+PASS  DisplayVersion is 2.0.0.2008 (reads: 2.0.0.2008)
+PASS  Publisher is Apurba Laskar (reads: Apurba Laskar)
+PASS  InstallLocation is the per-user Byte folder (reads: C:\Users\runneradmin\AppData\Local\Programs\Byte\)
+PASS  UninstallString names the uninstaller (reads: "C:\Users\runneradmin\AppData\Local\Programs\Byte\unins000.exe")
+PASS  entry is removable (NoRemove not set)
+PASS  Byte.exe present in the install folder
+installed Byte.exe: FileVersion 2.0.0+2008, ProductName Byte, CompanyName Apurba Laskar
+PASS  installed Byte.exe is byte-identical to the release Byte.exe
+PASS  Start menu entry Byte exists (Programs\Byte.lnk)
+PASS  Start menu entry points at the installed Byte.exe (reads: C:\Users\runneradmin\AppData\Local\Programs\Byte\Byte.exe)
+PASS  installed files match the release folder: 40 installed, 40 in the release
+PASS  no forbidden names or secret-like files in the installed folder (hits: 0)
+3. launching the installed Byte.exe for 30 s
+  smoke: started Byte.exe pid 8724
+  smoke: still running after 30 s: True
+  smoke: main window title: 'Byte'
+  smoke: screenshot 1024x768 saved
+  smoke: stopped Byte.exe
+PASS  installed Byte.exe still running after 30 s
+PASS  installed Byte.exe window title is 'Byte'
+4. silent uninstall
+PASS  uninstaller present in the install folder
+PASS  uninstall exits 0 (exit 0)
+PASS  after uninstall: no Installed-apps entry, no Byte.exe, no Start menu entry
+PASS  no Installed-apps entry remains (found 0)
+PASS  Start menu entry removed
+PASS  Byte.exe removed
+left in the install folder after uninstall: 0
+ALL CHECKS PASSED
+exe bytes: 118784
+FileVersion=2.0.0+2008 ProductVersion=2.0.0+2008 ProductName=Byte CompanyName=Apurba Laskar FileDescription=Byte OriginalFilename=Byte.exe
+LegalCopyright=Copyright (C) 2026 Apurba Laskar
+forbidden or secret-like hits: 0
+zip entries: 45, uncompressed bytes: 39334039, Byte/Byte.exe present: 1 (every entry read, CRC checked)
+zip bytes: 16650260
+zip sha256: 0c9986f8bf4a3a9f6dc67f2496727e53ba9e423dabe1d4717f898d19034dd0e8
+top level in zip folder:
+  data 1
+  Byte.exe 118784
+  connectivity_plus_plugin.dll 102400
+  dartjni.dll 58368
+  flutter_secure_storage_windows_plugin.dll 158208
+  flutter_windows.dll 21289472
+  just_audio_windows_plugin.dll 183296
+  permission_handler_windows_plugin.dll 116736
+  README.txt 158
+  screen_retriever_windows_plugin.dll 121856
+  share_plus_plugin.dll 133632
+  speech_to_text_windows_plugin.dll 97792
+  url_launcher_windows_plugin.dll 98816
+  window_manager_plugin.dll 131584
+--- smoke
+started Byte.exe pid 2100
+still running after 30 s: True
+main window title: 'Byte'
+screenshot 1024x768 saved
+stopped Byte.exe
+--- audio
+audio endpoints (Win32_SoundDevice): 0
+Audiosrv: Running
+tone written: 529244 bytes, 440 Hz, 6 s, 16-bit mono 44.1 kHz
+t=0 state=Opening position=0 duration=0 volume=1 muted=False
+t=0.5 state=Opening position=0 duration=0 volume=1 muted=False
+t=1 state=Opening position=0 duration=0 volume=1 muted=False
+t=1.5 state=Opening position=0 duration=0 volume=1 muted=False
+t=2 state=None position=0 duration=0 volume=1 muted=False
+t=2.5 state=None position=0 duration=0 volume=1 muted=False
+t=3 state=None position=0 duration=0 volume=1 muted=False
+t=3.5 state=None position=0 duration=0 volume=1 muted=False
+t=4 state=None position=0 duration=0 volume=1 muted=False
+t=4.5 state=None position=0 duration=0 volume=1 muted=False
+t=5 state=None position=0 duration=0 volume=1 muted=False
+t=5.5 state=None position=0 duration=0 volume=1 muted=False
+t=6 state=None position=0 duration=0 volume=1 muted=False
+t=6.5 state=None position=0 duration=0 volume=1 muted=False
+t=7 state=None position=0 duration=0 volume=1 muted=False
+t=7.5 state=None position=0 duration=0 volume=1 muted=False
+player disposed
+--- fullscreen
+screen 1024x768 logical
+before: rect=[10, 10, 1054, 730] style=0x14cf0000
+full: active=true rect=[0, 0, 1024, 768] monitor=[0, 0, 1024, 768] style=0x94000000
+shot top4=0 bottom4=0 size=1024x768
+full, later: rect=[0, 0, 1024, 768]
+later shot top4=0.8 bottom4=0 size=1024x768
+back: active=false rect=[10, 10, 1054, 730] style=0x14cf0000
+flutter test exit code 0
