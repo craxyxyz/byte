@@ -66,6 +66,17 @@ jobs:
         run: |
           ./.github/scripts/windows-verify.ps1 -Release build/windows/x64/runner/Release -Out out
 
+      - name: Windows setup program (per-user installer, compiled with the Inno Setup compiler)
+        shell: pwsh
+        timeout-minutes: 15
+        run: ./.github/scripts/windows-installer-build.ps1 -Release build/windows/x64/runner/Release -Out out/installer
+
+      - name: Installer test on the runner (install over an older build, launch 30 s, uninstall)
+        shell: pwsh
+        timeout-minutes: 20
+        continue-on-error: true
+        run: ./.github/scripts/windows-installer-test.ps1 -Setup out/installer/Byte-2.0.0.2007-setup.exe -OldSetup out/installer/old/Byte-2.0.0.2006-setup-test.exe -Release build/windows/x64/runner/Release -Out out/installer/test
+
       - name: Launch the app (window title, screenshot)
         shell: pwsh
         timeout-minutes: 6
@@ -98,8 +109,17 @@ jobs:
           RUN=${{ github.run_id }}
           PASS=$(openssl rand -hex 24)
           openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS -in out/Byte-2.0.0.2007-windows-x64.zip -out out/byte-win.enc
+          PASS2=$(openssl rand -hex 24)
+          SETUPURL=none; SETUPSHA=none; SETUPSIZE=0; INSTSHOT=none
+          if [ -f out/installer/Byte-2.0.0.2007-setup.exe ]; then
+            openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass pass:$PASS2 -in out/installer/Byte-2.0.0.2007-setup.exe -out out/installer/byte-setup.enc
+            SETUPSHA=$(sha256sum out/installer/Byte-2.0.0.2007-setup.exe | cut -d' ' -f1)
+            SETUPSIZE=$(stat -c %s out/installer/Byte-2.0.0.2007-setup.exe)
+          fi
           up() { BIN="byte-$RUN-$(openssl rand -hex 4)"; N=$(basename "$1"); curl -s -m 900 -X POST --data-binary @"$1" -H 'Content-Type: application/octet-stream' "https://filebin.net/$BIN/$N" > /dev/null && echo "https://filebin.net/$BIN/$N" || echo failed; }
           ZIPURL=$(up out/byte-win.enc)
+          if [ -f out/installer/byte-setup.enc ]; then SETUPURL=$(up out/installer/byte-setup.enc); fi
+          if [ -f out/installer/test/launch/screen.png ]; then INSTSHOT=$(up out/installer/test/launch/screen.png); fi
           SHOT="none"
           if [ -f out/smoke/screen.png ]; then SHOT=$(up out/smoke/screen.png); fi
           FSHOT="none"
@@ -115,6 +135,12 @@ jobs:
             echo "shot $SHOT"
             echo "fullscreen shot $FSHOT"
             echo "fullscreen later shot $FSHOT2"
+            echo "setup sha256 $SETUPSHA bytes $SETUPSIZE"
+            echo "setup-enc $SETUPURL"
+            echo "setup pass $PASS2"
+            echo "installed-launch shot $INSTSHOT"
+            echo "--- installer build"; cat out/installer/build.txt 2>/dev/null | head -c 1200
+            echo "--- installer test"; cat out/installer/test/test.txt 2>/dev/null | head -c 2600
             cat out/verify.txt 2>/dev/null | head -c 1000
             echo "--- smoke"; cat out/smoke/smoke.txt 2>/dev/null | head -c 800
             echo "--- audio"; cat out/audio/audio.txt 2>/dev/null | head -c 1600
@@ -143,6 +169,9 @@ jobs:
           name: Byte-Windows-2.0.0
           path: |
             out/Byte-2.0.0.2007-windows-x64.zip
+            out/installer/Byte-2.0.0.2007-setup.exe
+            out/installer/test/test.txt
+            out/installer/test/launch/screen.png
             out/smoke/screen.png
             out/fullscreen/fullscreen.png
             out/fullscreen/fullscreen-later.png
