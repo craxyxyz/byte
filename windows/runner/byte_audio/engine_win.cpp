@@ -50,8 +50,8 @@ HRESULT OpenReader(const std::wstring& source, IMFSourceReader** reader, int64_t
   IMFSourceReader* r = nullptr;
   HRESULT hr = MFCreateSourceReaderFromURL(source.c_str(), nullptr, &r);
   if (FAILED(hr)) return hr;
-  r->SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, FALSE);
-  r->SetStreamSelection(MF_SOURCE_READER_FIRST_AUDIO_STREAM, TRUE);
+  r->SetStreamSelection(static_cast<DWORD>(MF_SOURCE_READER_ALL_STREAMS), FALSE);
+  r->SetStreamSelection(static_cast<DWORD>(MF_SOURCE_READER_FIRST_AUDIO_STREAM), TRUE);
   IMFMediaType* type = nullptr;
   hr = MFCreateMediaType(&type);
   if (SUCCEEDED(hr)) {
@@ -60,7 +60,7 @@ HRESULT OpenReader(const std::wstring& source, IMFSourceReader** reader, int64_t
     type->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 32);
     type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, kRate);
     type->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, kChannels);
-    hr = r->SetCurrentMediaType(MF_SOURCE_READER_FIRST_AUDIO_STREAM, nullptr, type);
+    hr = r->SetCurrentMediaType(static_cast<DWORD>(MF_SOURCE_READER_FIRST_AUDIO_STREAM), nullptr, type);
     type->Release();
   }
   if (FAILED(hr)) {
@@ -98,7 +98,7 @@ bool ReadBlock(IMFSourceReader* r, std::vector<float>& out, bool& eos) {
     DWORD flags = 0;
     LONGLONG ts = 0;
     IMFSample* sample = nullptr;
-    HRESULT hr = r->ReadSample(MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0, nullptr, &flags, &ts, &sample);
+    HRESULT hr = r->ReadSample(static_cast<DWORD>(MF_SOURCE_READER_FIRST_AUDIO_STREAM), 0, nullptr, &flags, &ts, &sample);
     if (FAILED(hr)) {
       eos = true;
       return false;

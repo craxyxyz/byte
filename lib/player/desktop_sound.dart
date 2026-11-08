@@ -351,7 +351,9 @@ class SwitchPlayer extends AudioPlayerPlatform {
     if (gen != _gen) return;
   }
 
-  Future<void> _toEngine(LoadRequest req, Duration pos, bool play) async {
+  /// Plays [req] on the engine at [pos]. When the engine cannot open the song,
+  /// the normal player plays it instead, so the sound never stops for want of an effect.
+  Future<LoadResponse> _toEngine(LoadRequest req, Duration pos, bool play) async {
     final uri = (req.audioSourceMessage as UriAudioSourceMessage).uri;
     try {
       await inner.pause(PauseRequest());
@@ -364,10 +366,11 @@ class SwitchPlayer extends AudioPlayerPlatform {
     _startPump();
     _emitState(ProcessingStateMessage.loading);
     final st = await _waitReady(id);
-    if (st == null || st.state == 'error') {
+    if (st == null || st.state == 'error' || _disposed) {
       _onEngine = false;
-      _emitState(ProcessingStateMessage.idle, error: st?.error ?? 'the sound engine did not open the song');
-      return;
+      _stopPump();
+      if (_disposed) return LoadResponse(duration: _dur);
+      return _fallBack(req, pos, play);
     }
     _dur = st.durMs == null || st.durMs! < 0 ? _dur : Duration(milliseconds: st.durMs!);
     _emitState(ProcessingStateMessage.ready);
@@ -376,6 +379,19 @@ class SwitchPlayer extends AudioPlayerPlatform {
       _playing = true;
       _data.add(PlayerDataMessage(playing: true));
     }
+    return LoadResponse(duration: _dur);
+  }
+
+  /// The normal player takes [req] at [pos] (the engine could not).
+  Future<LoadResponse> _fallBack(LoadRequest req, Duration pos, bool play) async {
+    _onEngine = false;
+    _playing = false;
+    final r = await inner.load(LoadRequest(audioSourceMessage: req.audioSourceMessage, initialPosition: pos, initialIndex: null));
+    if (play) {
+      await inner.play(PlayRequest());
+      _playing = true;
+    }
+    return r;
   }
 
   Future<EngineStatus?> _waitReady(int id) async {
@@ -402,7 +418,7 @@ class SwitchPlayer extends AudioPlayerPlatform {
 
   @override
   Future<LoadResponse> load(LoadRequest request) async {
-    final gen = ++_gen;
+    ++_gen;
     _lastReq = request;
     _lastPos = request.initialPosition ?? Duration.zero;
     if (_onEngine) {
@@ -413,13 +429,10 @@ class SwitchPlayer extends AudioPlayerPlatform {
     if (!_wants(request)) {
       _onEngine = false;
       _playing = false;
-      final r = await inner.load(request);
-      return r;
+      return inner.load(request);
     }
     _playing = false;
-    await _toEngine(request, request.initialPosition ?? Duration.zero, false);
-    if (gen != _gen) return LoadResponse(duration: _dur);
-    return LoadResponse(duration: _dur);
+    return _toEngine(request, request.initialPosition ?? Duration.zero, false);
   }
 
   @override

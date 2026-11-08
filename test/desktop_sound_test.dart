@@ -224,6 +224,19 @@ void main() {
       await sw.dispose(DisposeRequest());
     });
 
+    test('a song the engine cannot open plays on the normal player', () async {
+      DesktopSound.effectsOn = true;
+      engine.next = const EngineStatus(state: 'error', posMs: 0, durMs: null, playing: false, error: 'open failed', queuedMs: 0);
+      final sw = SwitchPlayer('p', FakePlayer('p'));
+      final r = await sw.load(LoadRequest(audioSourceMessage: uriSource('https://x/y.m4a'), initialPosition: const Duration(seconds: 5)));
+      expect(sw.onEngine, isFalse, reason: 'the engine could not open it');
+      expect((sw.inner as FakePlayer).calls, contains('load 5000'));
+      expect(r.duration, const Duration(minutes: 3));
+      await sw.play(PlayRequest());
+      expect((sw.inner as FakePlayer).calls, contains('play'));
+      await sw.dispose(DisposeRequest());
+    });
+
     test('a speed other than 1 keeps the normal player', () async {
       DesktopSound.effectsOn = true;
       final sw = SwitchPlayer('p', FakePlayer('p'));
