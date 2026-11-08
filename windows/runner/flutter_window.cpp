@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "byte_audio/byte_desktop_audio.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -25,6 +26,8 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  // Byte's own sound engine and the system media overlay (see byte_audio/).
+  ByteDesktopAudioRegisterWithRegistrar(flutter_controller_->engine()->GetRegistrarForPlugin("ByteDesktopAudio"));
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {

@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../player/desktop_sound.dart';
 import '../services.dart';
 
 class PlayPauseIntent extends Intent {
@@ -84,6 +85,7 @@ Map<Type, Action<Intent>> byteActions(Map<Type, Action<Intent>> base) => {
   ...base,
   PlayPauseIntent: CallbackAction<PlayPauseIntent>(
     onInvoke: (_) {
+      if (!MediaButtons.takeKey()) return null;
       final p = Services.i.player;
       if (p.current.value == null) return null;
       p.playing ? p.pause() : p.play();
@@ -92,12 +94,14 @@ Map<Type, Action<Intent>> byteActions(Map<Type, Action<Intent>> base) => {
   ),
   NextSongIntent: CallbackAction<NextSongIntent>(
     onInvoke: (_) {
+      if (!MediaButtons.takeKey()) return null;
       if (Services.i.player.current.value != null) Services.i.player.skipToNext();
       return null;
     },
   ),
   PreviousSongIntent: CallbackAction<PreviousSongIntent>(
     onInvoke: (_) {
+      if (!MediaButtons.takeKey()) return null;
       if (Services.i.player.current.value != null) Services.i.player.skipToPrevious();
       return null;
     },

@@ -42,6 +42,8 @@ import 'lock/lock_app.dart';
 import 'lock/lock_bridge.dart';
 import 'ui/glass.dart';
 import 'player/home_widget_sync.dart';
+import 'player/desktop_sound.dart';
+import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
 import 'web/no_webview.dart';
 import 'player/stop_on_close_native.dart';
 import 'web/web_proxy.dart';
@@ -136,8 +138,38 @@ Future<void> main() async {
   // Windows / Linux: audio_service has no desktop side, so the same handler
   // runs without it (keyboard keys play/pause and skip, see keyboard_shortcuts).
   final desktop = !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux);
+  // 2.0.9 Windows: Byte's own sound engine for the Audio Lab effects (see player/desktop_sound.dart).
+  if (desktopEngineSupported) {
+    SoundBackend.override = () => WindowsSoundBackend();
+    JustAudioPlatform.instance = ByteSwitchPlatform(JustAudioPlatform.instance);
+  }
   ByteAudioHandler makeHandler() => ByteAudioHandler(resolver: resolver, yt: yt, library: library, settings: settings, equalizer: equalizer, automix: automix);
   final ByteAudioHandler handler = desktop ? makeHandler() : await AudioService.init(builder: makeHandler, config: byteAudioConfig);
+  if (desktopEngineSupported) {
+    // Windows media overlay: title, artist, artwork and the buttons (own binding, see windows/byte_audio).
+    final overlay = DesktopMediaOverlay(
+      play: () => handler.play(),
+      pause: () => handler.pause(),
+      next: () => handler.skipToNext(),
+      previous: () => handler.skipToPrevious(),
+      stop: () => handler.pause(),
+      snapshot: () {
+        final m = handler.mediaItem.value;
+        final st = handler.playbackState.value;
+        return (
+          title: m?.title ?? '',
+          artist: m?.artist ?? '',
+          album: m?.album ?? '',
+          art: m?.artUri?.toString() ?? '',
+          hasItem: m != null,
+          playing: st.playing,
+          posMs: st.updatePosition.inMilliseconds,
+          durMs: m?.duration?.inMilliseconds ?? 0,
+        );
+      },
+    );
+    unawaited(overlay.start());
+  }
   // 2.0 web: the official embedded player makes the sound (visible, small)
   if (kIsWeb && EmbedBridge().available()) {
     handler.remote = WebEmbedOutput(

@@ -46,7 +46,7 @@ void main() {
       final pbx = File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
       expect(pbx, contains('PRODUCT_BUNDLE_IDENTIFIER = com.apurbalaskar.byte2;'));
       expect(pbx, isNot(contains('PRODUCT_BUNDLE_IDENTIFIER = com.apurbalaskar.byte;')));
-      expect(File('pubspec.yaml').readAsStringSync(), contains('version: 2.0.0+2008'));
+      expect(File('pubspec.yaml').readAsStringSync(), contains('version: 2.0.0+2009'));
     });
 
     test('app icon names carry no phone brand', () {

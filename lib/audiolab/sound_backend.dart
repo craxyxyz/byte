@@ -52,6 +52,9 @@ class SoundCaps {
   /// A computer whose player has no sound hook.
   static const desktopPlain = SoundCaps(place: 'on this computer');
 
+  /// 2.0.9: Byte's own sound engine on Windows (player/desktop_sound.dart).
+  static const computer = SoundCaps(eq: true, preamp: true, reverb: true, loudness: true, crossfeed: true, mono: true, balance: true, place: 'on this computer');
+
   SoundCaps copyWith({bool? eq, bool? preamp, bool? reverb, bool? loudness, bool? crossfeed, bool? mono, bool? balance, bool? pitch, bool? keepPitch, bool? surround}) => SoundCaps(
     eq: eq ?? this.eq,
     preamp: preamp ?? this.preamp,

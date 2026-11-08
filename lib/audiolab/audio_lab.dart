@@ -39,9 +39,11 @@ class EqMath {
   static const sampleRate = 48000.0;
   static const minF = 20.0, maxF = 20000.0;
 
-  /// Gain in dB of one point at frequency [f].
-  static double nodeDb(EqNode n, double f) {
-    if (n.g.abs() < 1e-6) return 0;
+  /// The normalised biquad (a0 = 1) of one point, as [b0, b1, b2, a1, a2]
+  /// (RBJ cookbook). Null for a flat point. The curve on screen and the
+  /// computer's sound engine both use these numbers.
+  static List<double>? sectionCoefficients(EqNode n) {
+    if (n.g.abs() < 1e-6) return null;
     final a = math.pow(10, n.g / 40).toDouble();
     final w0 = 2 * math.pi * n.f.clamp(minF, maxF) / sampleRate;
     final cw = math.cos(w0), sw = math.sin(w0);
@@ -73,11 +75,18 @@ class EqMath {
         a1 = 2 * ((a - 1) - (a + 1) * cw);
         a2 = (a + 1) - (a - 1) * cw - s;
     }
+    return [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
+  }
+
+  /// Gain in dB of one point at frequency [f].
+  static double nodeDb(EqNode n, double f) {
+    final k = sectionCoefficients(n);
+    if (k == null) return 0;
     final w = 2 * math.pi * f / sampleRate;
     // |H(e^jw)|
     final c1 = math.cos(w), s1 = math.sin(w), c2 = math.cos(2 * w), s2 = math.sin(2 * w);
-    final nr = b0 + b1 * c1 + b2 * c2, ni = -(b1 * s1 + b2 * s2);
-    final dr = a0 + a1 * c1 + a2 * c2, di = -(a1 * s1 + a2 * s2);
+    final nr = k[0] + k[1] * c1 + k[2] * c2, ni = -(k[1] * s1 + k[2] * s2);
+    final dr = 1 + k[3] * c1 + k[4] * c2, di = -(k[3] * s1 + k[4] * s2);
     final mag = math.sqrt((nr * nr + ni * ni) / (dr * dr + di * di));
     return 20 * math.log(mag) / math.ln10;
   }
