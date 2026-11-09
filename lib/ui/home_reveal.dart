@@ -4,19 +4,20 @@ import 'package:flutter/material.dart';
 
 import '../services.dart';
 
-/// Home-page entrance, measured from the reference recording: sections come in
-/// one after another from the top of the page, each one rising a short way and
-/// fading up, and the page settles in roughly a second and a half.
+/// Home-page entrance, read from the reference recording: sections come in one
+/// after another from the top of the page in bursts about 0.3 s apart (the first
+/// at about 0.37 s), each rising a short way while it fades up. The rise and the
+/// stagger are read off the stills, not measured to the pixel.
 ///
 /// Byte's version: each section starts [kHomeRevealStep] after the one above
-/// it (capped at [kHomeRevealMaxSteps] steps so a long page does not wait), runs
+/// it (capped at [kHomeRevealMaxSteps] steps, so the whole page is in by about 1.9 s), runs
 /// for [kHomeRevealDuration] and then removes its own wrapper, so a settled
 /// section costs nothing per frame. It plays once per section, on its first
 /// build. Reduce-motion, or the system's disable-animations flag, shows the
 /// page at once.
-const Duration kHomeRevealStep = Duration(milliseconds: 120);
+const Duration kHomeRevealStep = Duration(milliseconds: 280);
 const Duration kHomeRevealDuration = Duration(milliseconds: 480);
-const int kHomeRevealMaxSteps = 8;
+const int kHomeRevealMaxSteps = 5;
 const double kHomeRevealRise = 22;
 
 /// Start delay for a section at [index] (its place in the page, top first).

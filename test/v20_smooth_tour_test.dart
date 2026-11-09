@@ -118,6 +118,9 @@ void main() {
       }
 
       await tester.pumpWidget(const ByteApp());
+      // the home sections enter over about 1.9 s when the feed lands (home_reveal.dart);
+      // the first still reading starts once they have settled
+      await tester.pump(const Duration(seconds: 3));
       await rec('Home', 'nothing playing');
       await tester.runAsync(() async {
         final album = await sv.yt.album('MPREb_E4GfUXfDfhy');

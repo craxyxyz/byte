@@ -52,12 +52,12 @@ double _opacity(WidgetTester t, Key key) {
 }
 
 void main() {
-  test('stagger steps 120 ms per place, capped at 8 steps', () {
+  test('stagger steps 280 ms per place, capped at 5 steps', () {
     expect(homeRevealDelay(0), Duration.zero);
-    expect(homeRevealDelay(1), const Duration(milliseconds: 120));
-    expect(homeRevealDelay(3), const Duration(milliseconds: 360));
-    expect(homeRevealDelay(8), const Duration(milliseconds: 960));
-    expect(homeRevealDelay(40), homeRevealDelay(8));
+    expect(homeRevealDelay(1), const Duration(milliseconds: 280));
+    expect(homeRevealDelay(3), const Duration(milliseconds: 840));
+    expect(homeRevealDelay(5), const Duration(milliseconds: 1400));
+    expect(homeRevealDelay(40), homeRevealDelay(5));
   });
 
   testWidgets('a section starts at its place in the order and rises into place', (t) async {
@@ -72,11 +72,11 @@ void main() {
     expect(_rise(t, b), kHomeRevealRise);
 
     await _advance(t, 120);
-    // section 0 is already moving; section 2 (starts at 240 ms) has not moved
+    // section 0 is already moving; section 2 (starts at 560 ms) has not moved
     expect(_rise(t, a), inExclusiveRange(0, kHomeRevealRise));
     expect(_rise(t, b), kHomeRevealRise);
 
-    await _advance(t, 200); // 320 ms: section 2 began at 240 ms
+    await _advance(t, 480); // 600 ms: section 2 began at 560 ms
     expect(_rise(t, b), inExclusiveRange(0, kHomeRevealRise));
     expect(_rise(t, b), greaterThan(_rise(t, a)), reason: 'the later section is still further down');
   });
@@ -96,9 +96,9 @@ void main() {
   testWidgets('a later section waits for its own start, however long the page', (t) async {
     const late = Key('late');
     await t.pumpWidget(_page(sections: const [HomeReveal(key: late, index: 20, child: SizedBox(width: 100, height: 40))]));
-    await _advance(t, 900);
-    expect(_rise(t, late), kHomeRevealRise, reason: 'index 20 is capped at 8 steps = 960 ms');
-    await _advance(t, 200);
+    await _advance(t, 1300);
+    expect(_rise(t, late), kHomeRevealRise, reason: 'index 20 is capped at 5 steps = 1400 ms');
+    await _advance(t, 300);
     expect(_rise(t, late), inExclusiveRange(0, kHomeRevealRise));
   });
 
