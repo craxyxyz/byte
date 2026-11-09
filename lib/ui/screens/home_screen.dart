@@ -7,6 +7,7 @@ import '../logo.dart';
 import '../mood_card.dart';
 import '../nav.dart';
 import '../page.dart';
+import '../home_reveal.dart';
 import '../shelves.dart';
 import '../shell.dart';
 import '../style.dart';
@@ -112,6 +113,9 @@ class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMi
     return out;
   }
 
+  /// One section of the page as a sliver, entering at its place in the order.
+  Widget _revealed(int index, Widget child) => SliverToBoxAdapter(child: HomeReveal(index: index, child: child));
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -130,13 +134,14 @@ class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMi
           // the DJ is a small feature inside the app, not a tab
           actions: const [DjPill()],
           slivers: [
+            // Each section enters in turn from the top (see home_reveal.dart).
             // 1.4.5: Liked songs + the playlists made in Byte, first, for every
             // account (Byte email, music-app log-in, or signed out)
-            const SliverToBoxAdapter(child: HomeLibraryRows()),
+            _revealed(0, const HomeLibraryRows()),
             // 1.4.2: imported playlists (works offline too)
             // 1.4.4: each logged-in music account's playlists ("From Spotify")
-            const SliverToBoxAdapter(child: MusicServiceRows()),
-            const SliverToBoxAdapter(child: ImportedRow()),
+            _revealed(1, const MusicServiceRows()),
+            _revealed(2, const ImportedRow()),
             if (failed)
               SliverToBoxAdapter(
                 child: ErrorRetry(
@@ -150,19 +155,21 @@ class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMi
               const SliverToBoxAdapter(child: HomeSkeleton())
             else ...[
               if (picks.isNotEmpty) ...[
-                const SliverToBoxAdapter(child: SectionTitle('Top Picks for You', padding: EdgeInsets.fromLTRB(16, 12, 16, 12))),
-                SliverToBoxAdapter(child: _TopPicks(picks: picks)),
+                _revealed(3, const SectionTitle('Top Picks for You', padding: EdgeInsets.fromLTRB(16, 12, 16, 12))),
+                _revealed(3, _TopPicks(picks: picks)),
               ],
               if (recents.isNotEmpty) ...[
-                SliverToBoxAdapter(child: SectionTitle(history.length >= 4 ? 'Recents' : (quick?.title ?? 'Quick picks'))),
-                SliverToBoxAdapter(child: PagedSongGrid(items: recents)),
+                _revealed(4, SectionTitle(history.length >= 4 ? 'Recents' : (quick?.title ?? 'Quick picks'))),
+                _revealed(4, PagedSongGrid(items: recents)),
               ],
               if (moods.isNotEmpty) ...[
-                SliverToBoxAdapter(
-                  child: SectionTitle('Find Your Mood', action: 'Show all', onAction: () => ShellState.current?.select(1)),
+                _revealed(
+                  5,
+                  SectionTitle('Find Your Mood', action: 'Show all', onAction: () => ShellState.current?.select(1)),
                 ),
-                SliverToBoxAdapter(
-                  child: SizedBox(
+                _revealed(
+                  5,
+                  SizedBox(
                     height: 96,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
@@ -177,7 +184,7 @@ class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMi
                   ),
                 ),
               ],
-              for (final s in rest) ShelfSliver(shelf: s),
+              for (var i = 0; i < rest.length; i++) _revealed(6 + i, ShelfView(shelf: rest[i])),
             ],
             SliverToBoxAdapter(
               child: SizedBox(
