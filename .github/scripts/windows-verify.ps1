@@ -15,7 +15,7 @@ $stage = Join-Path $Out 'Byte'
 Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
 Copy-Item -Recurse -Force $Release $stage
 $utf8 = New-Object System.Text.UTF8Encoding($false)
-[IO.File]::WriteAllText((Join-Path $stage 'README.txt'), "Byte 2.0.0 (build 2009) for Windows (64-bit)`r`nExtract and run Byte.exe.`r`nIf Windows SmartScreen appears: More info, then Run anyway.`r`n(c) 2026 Apurba Laskar`r`n", $utf8)
+[IO.File]::WriteAllText((Join-Path $stage 'README.txt'), "Byte 2.0.0 (build 2010) for Windows (64-bit)`r`nExtract and run Byte.exe.`r`nIf Windows SmartScreen appears: More info, then Run anyway.`r`n(c) 2026 Apurba Laskar`r`n", $utf8)
 # forbidden names and secrets in every shipped file
 $bad = @()
 $pats = @('bitchord','mochy')
@@ -31,7 +31,7 @@ foreach ($f in Get-ChildItem -Recurse -File $stage) {
 Log ("forbidden or secret-like hits: " + $bad.Count)
 foreach ($b in $bad) { Log ("  " + $b) }
 if ($bad.Count -gt 0) { throw "forbidden or secret-like content found" }
-$zip = Join-Path $Out 'Byte-2.0.0.2009-windows-x64.zip'
+$zip = Join-Path $Out 'Byte-2.0.0.2010-windows-x64.zip'
 Remove-Item -Force $zip -ErrorAction SilentlyContinue
 Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal -Force
 Add-Type -AssemblyName System.IO.Compression.FileSystem

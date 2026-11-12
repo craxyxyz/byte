@@ -9,8 +9,8 @@ param(
   [Parameter(Mandatory=$true)][string]$OldSetup,
   [Parameter(Mandatory=$true)][string]$Release,
   [Parameter(Mandatory=$true)][string]$Out,
-  [string]$Version = '2.0.0.2009',
-  [string]$OldVersion = '2.0.0.2008',
+  [string]$Version = '2.0.0.2010',
+  [string]$OldVersion = '2.0.0.2009',
   [string]$Publisher = 'Apurba Laskar',
   [string]$AppId = '{A3967736-04A6-40BC-9D80-86F101275C9D}'
 )
