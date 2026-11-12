@@ -436,17 +436,22 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               return LayoutBuilder(
                 builder: (context, c) => Row(
                   children: [
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 320),
-                      curve: Curves.easeOutCubic,
-                      child: full
-                          ? const SizedBox(width: 0, height: double.infinity)
-                          : SizedBox(
-                              width: c.maxWidth * 5 / 11,
-                              child: Column(
-                                children: [
-                                  Expanded(child: _SongArt(item: it)),
-                                  _PlayerControls(
+                    // 2.0.11 (Apurba, tablet and Windows): the cover stays beside the lyrics
+                    // in full-screen lyrics too. Only the controls fold away; the picture is
+                    // the one addition on the lyrics page. Phones never reach this layout.
+                    SizedBox(
+                      key: const ValueKey('np-wide-art'),
+                      width: c.maxWidth * 5 / 11,
+                      child: Column(
+                        children: [
+                          Expanded(child: _SongArt(item: it)),
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 320),
+                            curve: Curves.easeOutCubic,
+                            alignment: Alignment.topCenter,
+                            child: full
+                                ? const SizedBox(key: ValueKey('np-wide-controls-folded'), width: double.infinity)
+                                : _PlayerControls(
                                     item: it,
                                     mode: PlayerMode.song,
                                     sideMode: sideTab == NpTab.lyrics ? PlayerMode.lyrics : PlayerMode.queue,
@@ -457,9 +462,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                       _syncFullscreen();
                                     },
                                   ),
-                                ],
-                              ),
-                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     Expanded(
                       child: Column(

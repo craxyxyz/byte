@@ -1,0 +1,72 @@
+# © 2026 Apurba Laskar
+# Byte lyrics art (branch lyrics-art-2011): flutter analyze and the full flutter test suite on a Linux runner,
+# result published as run notices and a ci-logs file. No build, no release.
+name: Lyrics art checks
+
+on:
+  push:
+    branches: [lyrics-art-2011]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: byte-lyrics-art-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.8
+          cache: true
+
+      - name: Packages (lockfile enforced)
+        run: flutter pub get --enforce-lockfile
+
+      - name: Analyze
+        run: |
+          set +e
+          flutter analyze > analyze.txt 2>&1
+          echo "analyze exit $?" >> analyze.txt
+
+      - name: Full test suite
+        run: |
+          set +e
+          timeout -k 30 2400 flutter test -r expanded > test.txt 2>&1
+          echo "test exit $?" >> test.txt
+
+      - name: Publish the results (run notices, ci-logs branch)
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN=${{ github.run_id }}
+          {
+            echo "=== analyze"; tail -c 1500 analyze.txt
+            echo "=== tests: summary and failures"
+            grep -E '^\+[0-9]+|Some tests failed|All tests passed|FAILED|Failed|EXCEPTION|test exit' test.txt | tail -c 2500
+            echo "=== tests: tail"; tail -c 1500 test.txt
+          } > report.txt
+          python3 - <<'PY'
+          lines = [l.rstrip() for l in open('report.txt', encoding='utf-8', errors='replace') if l.strip()]
+          chunks, cur = [], ''
+          for l in lines:
+              if len(cur) + len(l) + 3 > 1500:
+                  chunks.append(cur); cur = ''
+              cur = (cur + ' | ' + l) if cur else l
+          if cur: chunks.append(cur)
+          for c in chunks[:8]:
+              print('::notice title=lyrics-art::' + c.replace('%', '%25').replace('\r', ''))
+          PY
+          B=$(base64 -w0 report.txt)
+          gh api -X PUT "repos/${{ github.repository }}/contents/ci/lyrics-$RUN.txt" -f message="lyrics art checks $RUN" -f content="$B" -f branch=ci-logs > /dev/null 2>&1 && echo "ci-logs ok" || echo "ci-logs push failed"
