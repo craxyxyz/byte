@@ -38,6 +38,12 @@ jobs:
           flutter analyze > analyze.txt 2>&1
           echo "analyze exit $?" >> analyze.txt
 
+      - name: The new lyrics tests on their own
+        run: |
+          set +e
+          timeout -k 30 900 flutter test -r expanded test/v2011_lyrics_art_test.dart > newtests.txt 2>&1
+          echo "new tests exit $?" >> newtests.txt
+
       - name: Full test suite
         run: |
           set +e
@@ -55,6 +61,7 @@ jobs:
             echo "=== analyze"; tail -c 1500 analyze.txt
             echo "=== tests: summary and failures"
             grep -E '^\+[0-9]+|Some tests failed|All tests passed|FAILED|Failed|EXCEPTION|test exit' test.txt | tail -c 2500
+            echo "=== new lyrics tests"; tail -c 1800 newtests.txt
             echo "=== tests: tail"; tail -c 1500 test.txt
           } > report.txt
           python3 - <<'PY'
